@@ -12,7 +12,7 @@
  *
  * This work was originally presented in Master's Thesis,
  *   "Block Ciphers: Fast Implementations on x86-64 Architecture" (pages 42-50)
- *   http://jultika.oulu.fi/Record/nbnfioulu-201305311409
+ *   http://urn.fi/URN:NBN:fi:oulu-201305311409
  */
 
 #include <stdint.h>
