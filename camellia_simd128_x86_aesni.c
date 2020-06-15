@@ -783,7 +783,7 @@ void camellia_encrypt_16blks_simd128(struct camellia_simd_ctx *ctx, void *vout,
   __m128i ab[8];
   __m128i cd[8];
   __m128i tmp0, tmp1;
-  unsigned int lastk;
+  unsigned int lastk, k;
 
   if (ctx->key_length > 16)
     lastk = 32;
@@ -796,28 +796,18 @@ void camellia_encrypt_16blks_simd128(struct camellia_simd_ctx *ctx, void *vout,
   inpack16_post(x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14,
 		x15, ab, cd);
 
-  enc_rounds16(x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14,
-	       x15, ab, cd, 0);
+  for (k = 0; k < lastk - 8; ) {
+    enc_rounds16(x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14,
+	         x15, ab, cd, k);
 
-  fls16(ab, x0, x1, x2, x3, x4, x5, x6, x7, cd, x8, x9, x10, x11, x12, x13, x14,
-	x15, &ctx->key_table[8], &ctx->key_table[9]);
+    k += 8;
 
-  enc_rounds16(x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14,
-	       x15, ab, cd, 8);
-
-  fls16(ab, x0, x1, x2, x3, x4, x5, x6, x7, cd, x8, x9, x10, x11, x12, x13, x14,
-	x15, &ctx->key_table[16], &ctx->key_table[17]);
-
-  enc_rounds16(x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14,
-	       x15, ab, cd, 16);
-
-  if (lastk == 32) {
-    fls16(ab, x0, x1, x2, x3, x4, x5, x6, x7, cd, x8, x9, x10, x11, x12, x13,
-	  x14, x15, &ctx->key_table[24], &ctx->key_table[25]);
-
-    enc_rounds16(x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13,
-		  x14, x15, ab, cd, 24);
+    fls16(ab, x0, x1, x2, x3, x4, x5, x6, x7, cd, x8, x9, x10, x11, x12, x13, x14,
+	  x15, &ctx->key_table[k], &ctx->key_table[k + 1]);
   }
+
+  enc_rounds16(x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14,
+	       x15, ab, cd, lastk - 8);
 
   /* load CD for output */
   vmovdqa128(cd[0], x8);
@@ -847,7 +837,7 @@ void camellia_decrypt_16blks_simd128(struct camellia_simd_ctx *ctx, void *vout,
   __m128i ab[8];
   __m128i cd[8];
   __m128i tmp0, tmp1;
-  unsigned int firstk;
+  unsigned int firstk, k;
 
   if (ctx->key_length > 16)
     firstk = 32;
@@ -860,28 +850,16 @@ void camellia_decrypt_16blks_simd128(struct camellia_simd_ctx *ctx, void *vout,
   inpack16_post(x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14,
 		x15, ab, cd);
 
-  if (firstk == 32) {
+  for (k = firstk - 8; k > 0; k -= 8) {
     dec_rounds16(x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13,
-		 x14, x15, ab, cd, 24);
+		 x14, x15, ab, cd, k);
 
     fls16(ab, x0, x1, x2, x3, x4, x5, x6, x7, cd, x8, x9, x10, x11, x12, x13,
-	  x14, x15, &ctx->key_table[25], &ctx->key_table[24]);
+	  x14, x15, &ctx->key_table[k + 1], &ctx->key_table[k]);
   }
 
-  dec_rounds16(x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14,
-	       x15, ab, cd, 16);
-
-  fls16(ab, x0, x1, x2, x3, x4, x5, x6, x7, cd, x8, x9, x10, x11, x12, x13, x14,
-	x15, &ctx->key_table[17], &ctx->key_table[16]);
-
-  dec_rounds16(x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14,
-	       x15, ab, cd, 8);
-
-  fls16(ab, x0, x1, x2, x3, x4, x5, x6, x7, cd, x8, x9, x10, x11, x12, x13, x14,
-	x15, &ctx->key_table[9], &ctx->key_table[8]);
-
-  dec_rounds16(x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14,
-	       x15, ab, cd, 0);
+  dec_rounds16(x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13,
+	       x14, x15, ab, cd, 0);
 
   /* load CD for output */
   vmovdqa128(cd[0], x8);

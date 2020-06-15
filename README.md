@@ -40,7 +40,7 @@ The SIMD256 (256-bit vector) implementation variants process 32 blocks in parall
 - [camellia_simd256_x86_aesni.c](camellia_simd256_x86_aesni.c):
   - Intel C intrinsics implentation for x86 with AES-NI. Requires either AVX2 instruction set and gets best
   performance with x86-64 + AVX2.
-  - On AMD Ryzen 3700X, when compiled for x86-64+AVX2, this implementation is **~4.5 times faster** than
+  - On AMD Ryzen 3700X, when compiled for x86-64+AVX2, this implementation is **~4.7 times faster** than
     reference.
 
 - [camellia_simd256_x86-64_aesni_avx2.S](camellia_simd256_x86-64_aesni_avx2.S):
