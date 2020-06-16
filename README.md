@@ -25,13 +25,13 @@ The SIMD128 (128-bit vector) implementation variants process 16 blocks in parall
   - Intel C intrinsics implentation for x86 with AES-NI. Requires either SSE4.1 or AVX instruction set and gets best
   performance with x86-64 + AVX.
   - Includes vector intrinsics implementation of Camellia key-setup (for 128-bit, 192-bit and 256-bit keys).
-  - On AMD Ryzen 3700X, when compiled for x86-64+AVX, this implementation is **~2.7 times faster** than
+  - On AMD Ryzen 3700X, when compiled for x86-64+AVX, this implementation is **~3.5 times faster** than
     reference.
 
 - [camellia_simd128_x86-64_aesni_avx.S](camellia_simd128_x86-64_aesni_avx.S):
   - GCC assembly implementation for x86-64 with AES-NI and AVX.
   - Includes vector assembly implementation of Camellia key-setup (for 128-bit, 192-bit and 256-bit keys).
-  - On AMD Ryzen 3700X, this implementation is **~3.8 times faster** than reference.
+  - On AMD Ryzen 3700X, this implementation is **~4.1 times faster** than reference.
   - On Intel Haswell, CTR-mode adaptation runs at **5.93 cycles/byte**
     [*](https://github.com/jkivilin/supercop-blockciphers).
 
@@ -40,12 +40,12 @@ The SIMD256 (256-bit vector) implementation variants process 32 blocks in parall
 - [camellia_simd256_x86_aesni.c](camellia_simd256_x86_aesni.c):
   - Intel C intrinsics implentation for x86 with AES-NI. Requires either AVX2 instruction set and gets best
   performance with x86-64 + AVX2.
-  - On AMD Ryzen 3700X, when compiled for x86-64+AVX2, this implementation is **~4.7 times faster** than
+  - On AMD Ryzen 3700X, when compiled for x86-64+AVX2, this implementation is **~5.9 times faster** than
     reference.
 
 - [camellia_simd256_x86-64_aesni_avx2.S](camellia_simd256_x86-64_aesni_avx2.S):
   - GCC assembly implementation for x86-64 with AES-NI and AVX2.
-  - On AMD Ryzen 3700X, when compiled for x86-64+AVX2, this implementation is **~6.2 times faster** than
+  - On AMD Ryzen 3700X, when compiled for x86-64+AVX2, this implementation is **~6.6 times faster** than
     reference.
   - On Intel Haswell, CTR-mode adaptation runs at **3.72 cycles/byte**
     [*](https://github.com/jkivilin/supercop-blockciphers).
@@ -100,18 +100,18 @@ For example, output of `test_simd256_asm_x86_64` and `test_simd256_intrinsics_x8
 <pre>
 $ ./test_simd256_asm_x86_64
 ./test_simd256_asm_x86_64:
-           camellia-128 reference encryption:    234.414 Mebibytes/s,    245.801 Megabytes/s
-           camellia-128 reference decryption:    233.985 Mebibytes/s,    245.351 Megabytes/s
- camellia-128 SIMD128 (16 blocks) encryption:    876.299 Mebibytes/s,    918.866 Megabytes/s
- camellia-128 SIMD128 (16 blocks) decryption:    875.282 Mebibytes/s,    917.800 Megabytes/s
- camellia-128 SIMD256 (32 blocks) encryption:   1422.292 Mebibytes/s,   1491.381 Megabytes/s
- camellia-128 SIMD256 (32 blocks) decryption:   1429.259 Mebibytes/s,   1498.686 Megabytes/s
+           camellia-128 reference encryption:    228.216 Mebibytes/s,    239.302 Megabytes/s
+           camellia-128 reference decryption:    227.059 Mebibytes/s,    238.089 Megabytes/s
+ camellia-128 SIMD128 (16 blocks) encryption:    936.011 Mebibytes/s,    981.479 Megabytes/s
+ camellia-128 SIMD128 (16 blocks) decryption:    935.099 Mebibytes/s,    980.522 Megabytes/s
+ camellia-128 SIMD256 (32 blocks) encryption:   1522.102 Mebibytes/s,   1596.040 Megabytes/s
+ camellia-128 SIMD256 (32 blocks) decryption:   1525.090 Mebibytes/s,   1599.173 Megabytes/s
 $ ./test_simd256_intrinsics_x86_64
 ./test_simd256_intrinsics_x86_64:
-           camellia-128 reference encryption:    227.164 Mebibytes/s,    238.199 Megabytes/s
-           camellia-128 reference decryption:    224.503 Mebibytes/s,    235.408 Megabytes/s
- camellia-128 SIMD128 (16 blocks) encryption:    618.418 Mebibytes/s,    648.459 Megabytes/s
- camellia-128 SIMD128 (16 blocks) decryption:    484.582 Mebibytes/s,    508.121 Megabytes/s
- camellia-128 SIMD256 (32 blocks) encryption:   1025.104 Mebibytes/s,   1074.900 Megabytes/s
- camellia-128 SIMD256 (32 blocks) decryption:   1013.418 Mebibytes/s,   1062.645 Megabytes/s
+           camellia-128 reference encryption:    227.420 Mebibytes/s,    238.467 Megabytes/s
+           camellia-128 reference decryption:    226.301 Mebibytes/s,    237.294 Megabytes/s
+ camellia-128 SIMD128 (16 blocks) encryption:    812.699 Mebibytes/s,    852.177 Megabytes/s
+ camellia-128 SIMD128 (16 blocks) decryption:    814.866 Mebibytes/s,    854.449 Megabytes/s
+ camellia-128 SIMD256 (32 blocks) encryption:   1358.787 Mebibytes/s,   1424.791 Megabytes/s
+ camellia-128 SIMD256 (32 blocks) decryption:   1393.658 Mebibytes/s,   1461.357 Megabytes/s
 </pre>
