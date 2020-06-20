@@ -1,8 +1,10 @@
 # About
-This is repository, you find x86 AES-NI accelerated vector implementations of
-[Camellia cipher](https://info.isl.ntt.co.jp/crypt/eng/camellia/). Both Intel C intrinsics
-and x86-64 assembly implementations are provided, with assembly yielding best performance
-and instrinsics implementation being easier to port to other instruction sets.
+This is repository, you find x86 AES and ARMv8 Crypto Extension accelerated vector
+implementations of [Camellia cipher](https://info.isl.ntt.co.jp/crypt/eng/camellia/).
+For x86, both Intel C intrinsics and x86-64 assembly implementations are provided,
+with assembly yielding best performance and instrinsics implementation being
+easier to port to other instruction sets. For ARM AArch64, 128-bit vector
+instrinsics implementation is provided.
 
 # How it works
 It happens to be that Camellia uses s-box construction is very similar to AES SubBytes.
@@ -21,9 +23,10 @@ CFB decryption, XTS, OCB, etc.
 ## SIMD128
 The SIMD128 (128-bit vector) implementation variants process 16 blocks in parallel.
 
-- [camellia_simd128_x86_aesni.c](camellia_simd128_x86_aesni.c):
-  - Intel C intrinsics implentation for x86 with AES-NI. Requires either SSE4.1 or AVX instruction set and gets best
-  performance with x86-64 + AVX.
+- [camellia_simd128_with_aes_instruction_set.c](camellia_simd128_with_aes_instruction_set.c):
+  - C intrinsics implementation for x86 with AES-NI and for ARMv8 with Crypto Extension.
+    - x86 implementation requires AES-NI and either SSE4.1 or AVX instruction set and gets best performance with x86-64 + AVX.
+    - ARM implementation requires AArch64, NEON and ARMv8 crypto-extension instruction set.
   - Includes vector intrinsics implementation of Camellia key-setup (for 128-bit, 192-bit and 256-bit keys).
   - On AMD Ryzen 3700X, when compiled for x86-64+AVX, this implementation is **~3.5 times faster** than
     reference.
@@ -100,18 +103,32 @@ For example, output of `test_simd256_asm_x86_64` and `test_simd256_intrinsics_x8
 <pre>
 $ ./test_simd256_asm_x86_64
 ./test_simd256_asm_x86_64:
-           camellia-128 reference encryption:    228.216 Mebibytes/s,    239.302 Megabytes/s
-           camellia-128 reference decryption:    227.059 Mebibytes/s,    238.089 Megabytes/s
- camellia-128 SIMD128 (16 blocks) encryption:    936.011 Mebibytes/s,    981.479 Megabytes/s
- camellia-128 SIMD128 (16 blocks) decryption:    935.099 Mebibytes/s,    980.522 Megabytes/s
- camellia-128 SIMD256 (32 blocks) encryption:   1522.102 Mebibytes/s,   1596.040 Megabytes/s
- camellia-128 SIMD256 (32 blocks) decryption:   1525.090 Mebibytes/s,   1599.173 Megabytes/s
+selftest: comparing camellia-128 against reference implementation...
+selftest: comparing camellia-192 against reference implementation...
+selftest: comparing camellia-256 against reference implementation...
+selftest: checking 16-block parallel camellia-128/SIMD128 against test vectors...
+selftest: checking 32-block parallel camellia-128/SIMD256 against test vectors...
+selftest: checking 16-block parallel camellia-128/SIMD128 against large test vectors...
+selftest: checking 32-block parallel camellia-128/SIMD256 against large test vectors...
+           camellia-128 reference encryption:    237.327 Mebibytes/s,    248.855 Megabytes/s
+           camellia-128 reference decryption:    236.818 Mebibytes/s,    248.322 Megabytes/s
+ camellia-128 SIMD128 (16 blocks) encryption:    982.391 Mebibytes/s,   1030.112 Megabytes/s
+ camellia-128 SIMD128 (16 blocks) decryption:    976.979 Mebibytes/s,   1024.437 Megabytes/s
+ camellia-128 SIMD256 (32 blocks) encryption:   1590.665 Mebibytes/s,   1667.934 Megabytes/s
+ camellia-128 SIMD256 (32 blocks) decryption:   1596.805 Mebibytes/s,   1674.372 Megabytes/s
 $ ./test_simd256_intrinsics_x86_64
 ./test_simd256_intrinsics_x86_64:
-           camellia-128 reference encryption:    227.420 Mebibytes/s,    238.467 Megabytes/s
-           camellia-128 reference decryption:    226.301 Mebibytes/s,    237.294 Megabytes/s
- camellia-128 SIMD128 (16 blocks) encryption:    812.699 Mebibytes/s,    852.177 Megabytes/s
- camellia-128 SIMD128 (16 blocks) decryption:    814.866 Mebibytes/s,    854.449 Megabytes/s
- camellia-128 SIMD256 (32 blocks) encryption:   1358.787 Mebibytes/s,   1424.791 Megabytes/s
- camellia-128 SIMD256 (32 blocks) decryption:   1393.658 Mebibytes/s,   1461.357 Megabytes/s
+selftest: comparing camellia-128 against reference implementation...
+selftest: comparing camellia-192 against reference implementation...
+selftest: comparing camellia-256 against reference implementation...
+selftest: checking 16-block parallel camellia-128/SIMD128 against test vectors...
+selftest: checking 32-block parallel camellia-128/SIMD256 against test vectors...
+selftest: checking 16-block parallel camellia-128/SIMD128 against large test vectors...
+selftest: checking 32-block parallel camellia-128/SIMD256 against large test vectors...
+           camellia-128 reference encryption:    236.199 Mebibytes/s,    247.673 Megabytes/s
+           camellia-128 reference decryption:    234.039 Mebibytes/s,    245.408 Megabytes/s
+ camellia-128 SIMD128 (16 blocks) encryption:    842.394 Mebibytes/s,    883.314 Megabytes/s
+ camellia-128 SIMD128 (16 blocks) decryption:    844.640 Mebibytes/s,    885.669 Megabytes/s
+ camellia-128 SIMD256 (32 blocks) encryption:   1457.799 Mebibytes/s,   1528.613 Megabytes/s
+ camellia-128 SIMD256 (32 blocks) decryption:   1462.731 Mebibytes/s,   1533.785 Megabytes/s
 </pre>
