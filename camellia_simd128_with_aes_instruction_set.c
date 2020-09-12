@@ -82,9 +82,11 @@
 #define aes_subbytes_and_shuf_and_xor(zero, a, o) \
         vaesenclast128(zero, a, o)
 #define aes_load_inv_shufmask(shufmask_reg) \
-	vmovdqa128(inv_shift_row, shufmask_reg)
+	load_frequent_const(inv_shift_row, shufmask_reg)
 #define aes_inv_shuf(shufmask_reg, a, o) \
 	vpshufb128(shufmask_reg, a, o)
+
+#define memory_barrier_with_vec(a) __asm__("" : "+w"(a) :: "memory")
 
 #endif /* __ARM_NEON */
 
@@ -147,9 +149,11 @@
 #define aes_subbytes_and_shuf_and_xor(zero, a, o) \
         vaesenclast128(zero, a, o)
 #define aes_load_inv_shufmask(shufmask_reg) \
-	vmovdqa128(inv_shift_row, shufmask_reg)
+	load_frequent_const(inv_shift_row, shufmask_reg)
 #define aes_inv_shuf(shufmask_reg, a, o) \
 	vpshufb128(shufmask_reg, a, o)
+
+#define memory_barrier_with_vec(a) __asm__("" : "+x"(a) :: "memory")
 
 #endif /* defined(__x86_64__) || defined(__i386__) */
 
@@ -180,6 +184,40 @@
 
 #define load_zero(o) vmovq128(0, o)
 
+#define load_frequent_const(constant, o) vmovdqa128(constant ## _stack, o)
+
+#define prepare_frequent_const(constant) \
+	vmovdqa128(constant, constant ## _stack); \
+	memory_barrier_with_vec(constant ## _stack)
+
+#define prepare_frequent_constants() \
+	prepare_frequent_const(inv_shift_row); \
+	prepare_frequent_const(mask_0f); \
+	prepare_frequent_const(pre_tf_lo_s1); \
+	prepare_frequent_const(pre_tf_hi_s1); \
+	prepare_frequent_const(pre_tf_lo_s4); \
+	prepare_frequent_const(pre_tf_hi_s4); \
+	prepare_frequent_const(post_tf_lo_s1); \
+	prepare_frequent_const(post_tf_hi_s1); \
+	prepare_frequent_const(post_tf_lo_s3); \
+	prepare_frequent_const(post_tf_hi_s3); \
+	prepare_frequent_const(post_tf_lo_s2); \
+	prepare_frequent_const(post_tf_hi_s2)
+
+#define frequent_constants_declare \
+	__m128i inv_shift_row_stack; \
+	__m128i mask_0f_stack; \
+	__m128i pre_tf_lo_s1_stack; \
+	__m128i pre_tf_hi_s1_stack; \
+	__m128i pre_tf_lo_s4_stack; \
+	__m128i pre_tf_hi_s4_stack; \
+	__m128i post_tf_lo_s1_stack; \
+	__m128i post_tf_hi_s1_stack; \
+	__m128i post_tf_lo_s3_stack; \
+	__m128i post_tf_hi_s3_stack; \
+	__m128i post_tf_lo_s2_stack; \
+	__m128i post_tf_hi_s2_stack
+
 /**********************************************************************
   16-way camellia macros
  **********************************************************************/
@@ -198,9 +236,9 @@
 	 * S-function with AES subbytes \
 	 */ \
 	aes_load_inv_shufmask(t4); \
-	vmovdqa128(mask_0f, t7); \
-	vmovdqa128(pre_tf_lo_s1, t0); \
-	vmovdqa128(pre_tf_hi_s1, t1); \
+	load_frequent_const(mask_0f, t7); \
+	load_frequent_const(pre_tf_lo_s1, t0); \
+	load_frequent_const(pre_tf_hi_s1, t1); \
 	\
 	/* AES inverse shift rows */ \
 	aes_inv_shuf(t4, x0, x0); \
@@ -213,8 +251,8 @@
 	aes_inv_shuf(t4, x6, x6); \
 	\
 	/* prefilter sboxes 1, 2 and 3 */ \
-	vmovdqa128(pre_tf_lo_s4, t2); \
-	vmovdqa128(pre_tf_hi_s4, t3); \
+	load_frequent_const(pre_tf_lo_s4, t2); \
+	load_frequent_const(pre_tf_hi_s4, t3); \
 	filter_8bit(x0, t0, t1, t7, t6); \
 	filter_8bit(x7, t0, t1, t7, t6); \
 	filter_8bit(x1, t0, t1, t7, t6); \
@@ -228,8 +266,8 @@
 	filter_8bit(x6, t2, t3, t7, t6); \
 	\
 	/* AES subbytes + AES shift rows */ \
-	vmovdqa128(post_tf_lo_s1, t0); \
-	vmovdqa128(post_tf_hi_s1, t1); \
+	load_frequent_const(post_tf_lo_s1, t0); \
+	load_frequent_const(post_tf_hi_s1, t1); \
 	aes_subbytes_and_shuf_and_xor(t4, x0, x0); \
 	aes_subbytes_and_shuf_and_xor(t4, x7, x7); \
 	aes_subbytes_and_shuf_and_xor(t4, x1, x1); \
@@ -240,16 +278,16 @@
 	aes_subbytes_and_shuf_and_xor(t4, x6, x6); \
 	\
 	/* postfilter sboxes 1 and 4 */ \
-	vmovdqa128(post_tf_lo_s3, t2); \
-	vmovdqa128(post_tf_hi_s3, t3); \
+	load_frequent_const(post_tf_lo_s3, t2); \
+	load_frequent_const(post_tf_hi_s3, t3); \
 	filter_8bit(x0, t0, t1, t7, t6); \
 	filter_8bit(x7, t0, t1, t7, t6); \
 	filter_8bit(x3, t0, t1, t7, t6); \
 	filter_8bit(x6, t0, t1, t7, t6); \
 	\
 	/* postfilter sbox 3 */ \
-	vmovdqa128(post_tf_lo_s2, t4); \
-	vmovdqa128(post_tf_hi_s2, t5); \
+	load_frequent_const(post_tf_lo_s2, t4); \
+	load_frequent_const(post_tf_hi_s2, t5); \
 	filter_8bit(x2, t2, t3, t7, t6); \
 	filter_8bit(x5, t2, t3, t7, t6); \
 	\
@@ -860,6 +898,9 @@ void camellia_encrypt_16blks_simd128(struct camellia_simd_ctx *ctx, void *vout,
   __m128i cd[8];
   __m128i tmp0, tmp1;
   unsigned int lastk, k;
+  frequent_constants_declare;
+
+  prepare_frequent_constants();
 
   if (ctx->key_length > 16)
     lastk = 32;
@@ -915,6 +956,9 @@ void camellia_decrypt_16blks_simd128(struct camellia_simd_ctx *ctx, void *vout,
   __m128i cd[8];
   __m128i tmp0, tmp1;
   unsigned int firstk, k;
+  frequent_constants_declare;
+
+  prepare_frequent_constants();
 
   if (ctx->key_length > 16)
     firstk = 32;
