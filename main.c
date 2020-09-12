@@ -89,18 +89,21 @@ static void do_selftest(void)
   unsigned int i, j;
 
   /* Check test vectors against reference implementation. */
+  printf("selftest: comparing camellia-%d against reference implementation...\n", 128);
   Camellia_set_key(test_vector_key_128, 128, &ctx_ref);
   Camellia_encrypt(test_vector_plaintext, tmp, &ctx_ref);
   assert(memcmp(tmp, test_vector_ciphertext_128, 16) == 0);
   Camellia_decrypt(tmp, tmp, &ctx_ref);
   assert(memcmp(tmp, test_vector_plaintext, 16) == 0);
 
+  printf("selftest: comparing camellia-%d against reference implementation...\n", 192);
   Camellia_set_key(test_vector_key_192, 192, &ctx_ref);
   Camellia_encrypt(test_vector_plaintext, tmp, &ctx_ref);
   assert(memcmp(tmp, test_vector_ciphertext_192, 16) == 0);
   Camellia_decrypt(tmp, tmp, &ctx_ref);
   assert(memcmp(tmp, test_vector_plaintext, 16) == 0);
 
+  printf("selftest: comparing camellia-%d against reference implementation...\n", 256);
   Camellia_set_key(test_vector_key_256, 256, &ctx_ref);
   Camellia_encrypt(test_vector_plaintext, tmp, &ctx_ref);
   assert(memcmp(tmp, test_vector_ciphertext_256, 16) == 0);
@@ -108,6 +111,7 @@ static void do_selftest(void)
   assert(memcmp(tmp, test_vector_plaintext, 16) == 0);
 
   /* Check 16-block SIMD128 implementation against known test vectors. */
+  printf("selftest: checking 16-block parallel camellia-128/SIMD128 against test vectors...\n");
   fill_blks(plaintext_simd, test_vector_plaintext, 16);
 
   memset(tmp, 0xaa, sizeof(tmp));
@@ -144,6 +148,7 @@ static void do_selftest(void)
 
 #ifdef USE_SIMD256
   /* Check 32-block SIMD256 implementation against known test vectors. */
+  printf("selftest: checking 32-block parallel camellia-128/SIMD256 against test vectors...\n");
   fill_blks(plaintext_simd, test_vector_plaintext, 32);
 
   memset(tmp, 0xaa, sizeof(tmp));
@@ -204,6 +209,7 @@ static void do_selftest(void)
   }
 
   /* Test 16-block SIMD128 implementation against large test vectors. */
+  printf("selftest: checking 16-block parallel camellia-128/SIMD128 against large test vectors...\n");
   camellia_keysetup_simd128(&ctx_simd, key, 128 / 8);
   memcpy(tmp, ref_large_plaintext, 16 * 16);
   for (i = 0; i < (1 << 16); i++) {
@@ -228,6 +234,7 @@ static void do_selftest(void)
 
 #ifdef USE_SIMD256
   /* Test 32-block SIMD256 implementation against large test vectors. */
+  printf("selftest: checking 32-block parallel camellia-128/SIMD256 against large test vectors...\n");
   camellia_keysetup_simd128(&ctx_simd, key, 128 / 8);
   memcpy(tmp, ref_large_plaintext, 32 * 16);
   for (i = 0; i < (1 << 16); i++) {
