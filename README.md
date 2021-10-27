@@ -60,7 +60,8 @@ The SIMD256 (256-bit vector) implementation variants process 32 blocks in parall
 - GNU make
 - GCC x86-64
 - Optionally GCC i386
-- Ubuntu 20.04 packages: gcc gcc-i686-linux-gnu libssl-dev libssl-dev:i386 make
+- Optionally GCC AArch64
+- Ubuntu 20.04 packages: gcc gcc-i686-linux-gnu gcc-aarch64-linux-gnu libssl-dev libssl-dev:i386 make
 
 ## Compiling
 Clone repository and run 'make'…
@@ -84,6 +85,9 @@ i686-linux-gnu-gcc -O2 -Wall -march=sandybridge -mtune=native -mavx2 -maes -c ca
 i686-linux-gnu-gcc -O2 -Wall -march=sandybridge -mtune=native -mavx2 -maes -c camellia_simd256_x86_aesni.c -o camellia_simd256_x86_aesni_i386.o
 i686-linux-gnu-gcc -O2 -Wall -DUSE_SIMD256 -c main.c -o main_simd256_i386.o
 i686-linux-gnu-gcc camellia_simd128_x86_aesni_avx2_i386.o camellia_simd256_x86_aesni_i386.o main_simd256_i386.o -o test_simd256_intrinsics_i386 -lcrypto
+aarch64-linux-gnu-gcc -O2 -Wall -march=armv8-a+crypto -mtune=cortex-a53 -c camellia_simd128_with_aes_instruction_set.c -o camellia_simd128_with_aarch64_ce.o
+aarch64-linux-gnu-gcc -O2 -Wall -c main.c -o main_simd128_aarch64.o
+aarch64-linux-gnu-gcc camellia_simd128_with_aarch64_ce.o main_simd128_aarch64.o -o test_simd128_intrinsics_aarch64 -lcrypto
 </pre>
 
 ## Testing
@@ -95,6 +99,7 @@ Executables are:
 - `test_simd128_asm_x86_64`: SIMD128 only, for testing assembly x86-64/AVX implementation without AVX2.
 - `test_simd128_intrinsics_i386`: SIMD128 only, for testing intrinsics implementation on i386/AVX without AVX2.
 - `test_simd128_intrinsics_x86_64`: SIMD128 only, for testing intrinsics implementation on x86_64/AVX without AVX2.
+- `test_simd128_intrinsics_aarch64`: SIMD128 only, for testing intrinsics implementation on ARMv8 AArch64 with Crypto Extensions.
 - `test_simd256_asm_x86_64`: SIMD256 and SIMD128, for testing assembly x86-64/AVX/AVX2 implementations.
 - `test_simd256_intrinsics_i386`: SIMD256 and SIMD128, for testing intrinsics implementations on i386/AVX/AVX2.
 - `test_simd256_intrinsics_x86_64`: SIMD256 and SIMD128, for testing intrinsics implementation on x86_64/AVX/AVX2.
