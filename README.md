@@ -137,3 +137,18 @@ selftest: checking 32-block parallel camellia-128/SIMD256 against large test vec
  camellia-128 SIMD256 (32 blocks) encryption:   1457.799 Mebibytes/s,   1528.613 Megabytes/s
  camellia-128 SIMD256 (32 blocks) decryption:   1462.731 Mebibytes/s,   1533.785 Megabytes/s
 </pre>
+
+For example, output of `test_simd256_intrinsics_aarch64` on ARM Cortex-A53 (648 Mhz):
+<pre>
+$ ./test_simd128_intrinsics_aarch64
+./test_simd128_intrinsics_aarch64:
+selftest: comparing camellia-128 against reference implementation...
+selftest: comparing camellia-192 against reference implementation...
+selftest: comparing camellia-256 against reference implementation...
+selftest: checking 16-block parallel camellia-128/SIMD128 against test vectors...
+selftest: checking 16-block parallel camellia-128/SIMD128 against large test vectors...
+           camellia-128 reference encryption:     21.633 Mebibytes/s,     22.684 Megabytes/s
+           camellia-128 reference decryption:     21.866 Mebibytes/s,     22.928 Megabytes/s
+ camellia-128 SIMD128 (16 blocks) encryption:     37.133 Mebibytes/s,     38.937 Megabytes/s
+ camellia-128 SIMD128 (16 blocks) decryption:     36.847 Mebibytes/s,     38.637 Megabytes/s
+</pre>
