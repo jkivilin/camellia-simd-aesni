@@ -78,7 +78,7 @@
 #define vmovdqu128_memst(a, o)  vst1q_u8((uint8_t *)(o), (uint8x16_t)a)
 #define vmovq128_memst(a, o)    (((uint64_unaligned_t *)(o))[0] = (a)[0])
 
-/* Macros for exposing SubBytes from AES-NI instruction set. */
+/* Macros for exposing SubBytes from Crypto-Extension instruction set. */
 #define aes_subbytes_and_shuf_and_xor(zero, a, o) \
         vaesenclast128(zero, a, o)
 #define aes_load_inv_shufmask(shufmask_reg) \
@@ -147,7 +147,7 @@
 
 /* Macros for exposing SubBytes from AES-NI instruction set. */
 #define aes_subbytes_and_shuf_and_xor(zero, a, o) \
-        vaesenclast128(zero, a, o)
+	vaesenclast128(zero, a, o)
 #define aes_load_inv_shufmask(shufmask_reg) \
 	load_frequent_const(inv_shift_row, shufmask_reg)
 #define aes_inv_shuf(shufmask_reg, a, o) \

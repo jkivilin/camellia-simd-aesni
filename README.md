@@ -41,14 +41,16 @@ The SIMD128 (128-bit vector) implementation variants process 16 blocks in parall
 ## SIMD256
 The SIMD256 (256-bit vector) implementation variants process 32 blocks in parallel.
 - [camellia_simd256_x86_aesni.c](camellia_simd256_x86_aesni.c):
-  - Intel C intrinsics implentation for x86 with AES-NI. Requires either AVX2 instruction set and gets best
-  performance with x86-64 + AVX2.
-  - On AMD Ryzen 3700X, when compiled for x86-64+AVX2, this implementation is **~5.9 times faster** than
+  - Intel C intrinsics implentation for x86 with AES-NI or VAES. Requires either AVX2 instruction set and gets best
+  performance with x86-64 + AVX2 + VAES.
+  - On AMD Ryzen 7 3700X, when compiled for **x86-64+AVX2+AES-NI**, this implementation is **~5.9 times faster** than
+    reference.
+  - On AMD Ryzen 9 7900X, when compiled for **x86-64+AVX512+VAES**, this implementation is **~8.6 times faster** than
     reference.
 
 - [camellia_simd256_x86-64_aesni_avx2.S](camellia_simd256_x86-64_aesni_avx2.S):
   - GCC assembly implementation for x86-64 with AES-NI and AVX2.
-  - On AMD Ryzen 3700X, when compiled for x86-64+AVX2, this implementation is **~6.6 times faster** than
+  - On AMD Ryzen 3700X, when compiled for **x86-64+AVX2+AES-NI**, this implementation is **~6.6 times faster** than
     reference.
   - On Intel Haswell, CTR-mode adaptation runs at **3.72 cycles/byte**
     [*](https://github.com/jkivilin/supercop-blockciphers).

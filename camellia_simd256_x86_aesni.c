@@ -42,8 +42,8 @@
 #define vpunpcklqdq256(a, b, o) (o = _mm256_unpacklo_epi64(b, a))
 
 /* AES-NI encrypt last round => ShiftRows + SubBytes + XOR round key  */
-#if defined(USE_AVX512VL) && defined(USE_VAES)
- /* VAES/AVX512VL have 256-bit wide AES instructions. */
+#if defined(USE_VAES)
+ /* VAES/AVX2 have 256-bit wide AES instructions. */
  #define vaesenclast256(a, b, o) (o = _mm256_aesenclast_epi128(b, a))
 #else
  /* AES-NI/AVX2 only have 128-bit wide AES instructions. */
