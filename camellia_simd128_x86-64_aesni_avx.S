@@ -1825,3 +1825,5 @@ camellia_keysetup_simd128:
 	vpor %xmm2, %xmm1, %xmm1;
 
 	jmp __camellia_avx_setup256;
+
+.section .note.GNU-stack,"",%progbits

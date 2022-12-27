@@ -910,3 +910,5 @@ camellia_decrypt_32blks_simd256:
 
 	vzeroall;
 	ret;
+
+.section .note.GNU-stack,"",%progbits
