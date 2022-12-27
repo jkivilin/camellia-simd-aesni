@@ -174,6 +174,7 @@ static void do_selftest(void)
   camellia_decrypt_16blks_simd128(&ctx_simd, tmp, tmp);
   assert(memcmp(tmp, plaintext_simd, 16 * 16) == 0);
 
+  printf("selftest: checking 16-block parallel camellia-192/SIMD128 against test vectors...\n");
   memset(tmp, 0xaa, sizeof(tmp));
   memset(&ctx_simd, 0xff, sizeof(ctx_simd));
   camellia_keysetup_simd128(&ctx_simd, test_vector_key_192, 192 / 8);
@@ -184,6 +185,7 @@ static void do_selftest(void)
   camellia_decrypt_16blks_simd128(&ctx_simd, tmp, tmp);
   assert(memcmp(tmp, plaintext_simd, 16 * 16) == 0);
 
+  printf("selftest: checking 16-block parallel camellia-256/SIMD128 against test vectors...\n");
   memset(tmp, 0xaa, sizeof(tmp));
   memset(&ctx_simd, 0xff, sizeof(ctx_simd));
   camellia_keysetup_simd128(&ctx_simd, test_vector_key_256, 256 / 8);
@@ -211,6 +213,7 @@ static void do_selftest(void)
   camellia_decrypt_32blks_simd256(&ctx_simd, tmp, tmp);
   assert(memcmp(tmp, plaintext_simd, 32 * 16) == 0);
 
+  printf("selftest: checking 32-block parallel camellia-192/SIMD256 against test vectors...\n");
   memset(tmp, 0xaa, sizeof(tmp));
   memset(&ctx_simd, 0xff, sizeof(ctx_simd));
   camellia_keysetup_simd128(&ctx_simd, test_vector_key_192, 192 / 8);
@@ -221,6 +224,7 @@ static void do_selftest(void)
   camellia_decrypt_32blks_simd256(&ctx_simd, tmp, tmp);
   assert(memcmp(tmp, plaintext_simd, 32 * 16) == 0);
 
+  printf("selftest: checking 32-block parallel camellia-256/SIMD256 against test vectors...\n");
   memset(tmp, 0xaa, sizeof(tmp));
   memset(&ctx_simd, 0xff, sizeof(ctx_simd));
   camellia_keysetup_simd128(&ctx_simd, test_vector_key_256, 256 / 8);
@@ -269,6 +273,7 @@ static void do_selftest(void)
   }
   assert(memcmp(tmp, ref_large_plaintext, 16 * 16) == 0);
 
+  printf("selftest: checking 16-block parallel camellia-256/SIMD128 against large test vectors...\n");
   camellia_keysetup_simd128(&ctx_simd, key, 256 / 8);
   memcpy(tmp, ref_large_plaintext, 16 * 16);
   for (i = 0; i < (1 << 16); i++) {
@@ -294,6 +299,7 @@ static void do_selftest(void)
   }
   assert(memcmp(tmp, ref_large_plaintext, 32 * 16) == 0);
 
+  printf("selftest: checking 32-block parallel camellia-256/SIMD256 against large test vectors...\n");
   camellia_keysetup_simd128(&ctx_simd, key, 256 / 8);
   memcpy(tmp, ref_large_plaintext, 32 * 16);
   for (i = 0; i < (1 << 16); i++) {

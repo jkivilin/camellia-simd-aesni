@@ -18,10 +18,123 @@
 #include <stdint.h>
 #include "camellia_simd.h"
 
+#if defined(__powerpc__) && defined(__VSX__) && defined(__CRYPTO__) && \
+    defined(_LITTLE_ENDIAN)
+
+/**********************************************************************
+  AT&T x86 asm to intrinsics conversion macros (PowerPC VSX+crypto)
+ **********************************************************************/
+#include <altivec.h>
+
+typedef vector signed char int8x16_t;
+typedef vector unsigned char uint8x16_t;
+typedef vector unsigned short uint16x8_t;
+typedef vector unsigned int uint32x4_t;
+typedef vector unsigned long long uint64x2_t;
+typedef uint64x2_t __m128i;
+
+#define vec_be_adjust(a)        ((__m128i)vec_reve((uint8x16_t)a))
+
+#define vpand128(a, b, o)       (o = vec_and(b, a))
+#define vpandn128(a, b, o)      (o = vec_andc(a, b))
+#define vpxor128(a, b, o)       (o = vec_xor(b, a))
+#define vpor128(a, b, o)        (o = vec_or(b, a))
+
+#define vpsrlb128(s, a, o)      ({ o = (__m128i)((uint8x16_t)a >> s); })
+#define vpsllb128(s, a, o)      ({ o = (__m128i)((uint8x16_t)a << s); })
+#define vpsrlw128(s, a, o)      ({ __m128i __tmpa = vec_be_adjust(a); \
+				   __tmpa = (__m128i)((uint16x8_t)__tmpa >> s); \
+				   o = vec_be_adjust(__tmpa);})
+#define vpsllw128(s, a, o)      ({ __m128i __tmpa = vec_be_adjust(a); \
+				   __tmpa = (__m128i)((uint16x8_t)__tmpa << s); \
+				   o = vec_be_adjust(__tmpa);})
+#define vpsrld128(s, a, o)      ({ __m128i __tmpa = vec_be_adjust(a); \
+				   __tmpa = (__m128i)((uint32x4_t)__tmpa >> s); \
+				   o = vec_be_adjust(__tmpa);})
+#define vpslld128(s, a, o)      ({ __m128i __tmpa = vec_be_adjust(a); \
+				   __tmpa = (__m128i)((uint32x4_t)__tmpa << s); \
+				   o = vec_be_adjust(__tmpa);})
+#define vpsrlq128(s, a, o)      ({ __m128i __tmpa = vec_be_adjust(a); \
+				   __tmpa = (__m128i)((uint64x2_t)__tmpa >> s); \
+				   o = vec_be_adjust(__tmpa);})
+#define vpsllq128(s, a, o)      ({ __m128i __tmpa = vec_be_adjust(a); \
+				   __tmpa = (__m128i)((uint64x2_t)__tmpa << s); \
+				   o = vec_be_adjust(__tmpa);})
+#define vpsrldq128(s, a, o)     ({ uint64x2_t __tmp = { 0, 0 }; \
+				  o = (__m128i)vec_sld((uint8x16_t)a, \
+						       (uint8x16_t)__tmp, (s) & 15);})
+#define vpslldq128(s, a, o)     ({ uint64x2_t __tmp = { 0, 0 }; \
+				  o = (__m128i)vec_sld((uint8x16_t)__tmp, \
+						       (uint8x16_t)a, (16 - (s)) & 15);})
+
+#define vpsrl_byte_128(s, a, o) vpsrlb128(s, a, o)
+#define vpsll_byte_128(s, a, o) vpsllb128(s, a, o)
+
+#define vpaddb128(a, b, o)      (o = (__m128i)vec_add((uint8x16_t)b, (uint8x16_t)a))
+#define vpaddw128(a, b, o)      (o = (__m128i)vec_add((uint16x8_t)b, (uint16x8_t)a))
+#define vpaddd128(a, b, o)      (o = (__m128i)vec_add((uint32x4_t)b, (uint32x4_t)a))
+
+#define vpcmpeqd128(a, b, o)    (o = (__m128i)vec_cmpeq((uint32x4_t)b, (uint32x4_t)a))
+
+#define vpcmpgtb128(a, b, o)    (o = (__m128i)vec_cmpgt((int8x16_t)b, (int8x16_t)a))
+#define vpabsb128(a, o)         (o = (__m128i)vec_abs((int8x16_t)a))
+
+#define vpshufd128_0x4e(a, o)   (o = (__m128i)vec_reve((uint64x2_t)a))
+#define vpshufd128_0x1b(a, o)   (o = (__m128i)vec_reve((uint32x4_t)a))
+#define vpshufb128(m, a, o) \
+	({ uint64x2_t __tmpz = { 0, 0 }; \
+	   o = (__m128i)vec_perm((uint8x16_t)__tmpz, (uint8x16_t)a, ~(uint8x16_t)m); })
+
+#define vpunpckhdq128(a, b, o)  (o = (__m128i)vec_mergeh((uint32x4_t)a, (uint32x4_t)b))
+#define vpunpckldq128(a, b, o)  (o = (__m128i)vec_mergel((uint32x4_t)a, (uint32x4_t)b))
+#define vpunpckhqdq128(a, b, o) (o = (__m128i)vec_mergeh((uint64x2_t)a, (uint64x2_t)b))
+#define vpunpcklqdq128(a, b, o) (o = (__m128i)vec_mergel((uint64x2_t)a, (uint64x2_t)b))
+
+/* PowerPC AES encrypt last round => ShiftRows + SubBytes + XOR round key  */
+#define vaesenclast128(a, b, o) (o = (__m128i)vec_cipherlast_be((uint8x16_t)b, (uint8x16_t)a))
+
+#define vmovdqa128(a, o)        (o = a)
+#define vmovd128(a, o)          ({ uint32x4_t __tmp = { (a), 0, 0, 0 }; \
+				   o = (__builtin_constant_p(a) && ((a) == 0)) \
+				       ? (__m128i)__tmp \
+				       : vec_be_adjust(__tmp); })
+#define vmovq128(a, o)          ({ uint64x2_t __tmp = { (a), 0 }; \
+				   o = (__builtin_constant_p(a) && ((a) == 0)) \
+				       ? (__m128i)__tmp \
+				       : vec_be_adjust(__tmp); })
+
+#define vmovdqa128_memld(a, o)  (o = vec_be_adjust(*(const __m128i *)(a)))
+#define vmovdqa128_memst(a, o)  (*(__m128i *)(o) = vec_be_adjust(a))
+#define vpshufb128_amemld(m, a, o) vpshufb128(vec_be_adjust(*(const __m128i *)(m)), a, o)
+
+/* Following operations may have unaligned memory input */
+#define vmovdqu128_memld(a, o)  (o = vec_be_adjust(vec_xl(0, (const uint8_t *)(a))))
+#define vpxor128_memld(a, b, o) vpxor128(b, vec_be_adjust(vec_xl(0, (const uint8_t *)(a))), o)
+
+/* Following operations may have unaligned memory output */
+#define vmovdqu128_memst(a, o)  vec_xst((uint8x16_t)vec_be_adjust(a), 0, (uint8_t *)(o))
+#define vmovq128_memst(a, o)    (((uint64_unaligned_t *)(o))[0] = (vec_be_adjust(a))[0])
+
+/* Macros for exposing SubBytes from PowerPC crypto instructions. */
+#define aes_subbytes(a, o) \
+	(o = (__m128i)vec_sbox_be((uint8x16_t)a))
+#define aes_subbytes_and_shuf_and_xor(zero, a, o) \
+        vaesenclast128(zero, a, o)
+#define aes_load_inv_shufmask(shufmask_reg) \
+	load_frequent_const(inv_shift_row, shufmask_reg)
+#define aes_inv_shuf(shufmask_reg, a, o) \
+	vpshufb128(shufmask_reg, a, o)
+#define if_aes_subbytes(...) __VA_ARGS__
+#define if_not_aes_subbytes(...) /*_*/
+
+#define memory_barrier_with_vec(a) __asm__("" : "+wa"(a) :: "memory")
+
+#endif /* __powerpc__ */
+
 #ifdef __ARM_NEON
 
 /**********************************************************************
-  AT&T x86 asm to intrinsics conversion macros
+  AT&T x86 asm to intrinsics conversion macros (ARMv8-CE)
  **********************************************************************/
 #include <arm_neon.h>
 
@@ -32,6 +145,8 @@
 #define vpxor128(a, b, o)       (o = veorq_u64(b, a))
 #define vpor128(a, b, o)        (o = vorrq_u64(b, a))
 
+#define vpsrlb128(s, a, o)      (o = (__m128i)vshrq_n_u8((uint8x16_t)a, s))
+#define vpsllb128(s, a, o)      (o = (__m128i)vshlq_n_u8((uint8x16_t)a, s))
 #define vpsrlw128(s, a, o)      (o = (__m128i)vshrq_n_u16((uint16x8_t)a, s))
 #define vpsllw128(s, a, o)      (o = (__m128i)vshlq_n_u16((uint16x8_t)a, s))
 #define vpsrld128(s, a, o)      (o = (__m128i)vshrq_n_u32((uint32x4_t)a, s))
@@ -44,6 +159,9 @@
 #define vpslldq128(s, a, o)     ({ uint64x2_t __tmp = { 0, 0 }; \
 				o = (__m128i)vextq_u8((uint8x16_t)__tmp, \
 						      (uint8x16_t)a, (16 - (s)) & 15);})
+
+#define vpsrl_byte_128(s, a, o) vpsrlb128(s, a, o)
+#define vpsll_byte_128(s, a, o) vpsllb128(s, a, o)
 
 #define vpaddb128(a, b, o)      (o = (__m128i)vaddq_u8((uint8x16_t)b, (uint8x16_t)a))
 #define vpaddw128(a, b, o)      (o = (__m128i)vaddq_u16((uint16x8_t)b, (uint16x8_t)a))
@@ -70,6 +188,10 @@
 #define vmovd128(a, o)          ({ uint32x4_t __tmp = { a, 0, 0, 0 }; o = (__m128i)__tmp; })
 #define vmovq128(a, o)          ({ uint64x2_t __tmp = { a, 0 }; o = (__m128i)__tmp; })
 
+#define vmovdqa128_memld(a, o)  (o = (*(const __m128i *)(a)))
+#define vmovdqa128_memst(a, o)  (*(__m128i *)(o) = (a))
+#define vpshufb128_amemld(m, a, o) vpshufb128(*(const __m128i *)(m), a, o)
+
 /* Following operations may have unaligned memory input */
 #define vmovdqu128_memld(a, o)  (o = (__m128i)vld1q_u8((const uint8_t *)(a)))
 #define vpxor128_memld(a, b, o) vpxor128(b, (__m128i)vld1q_u8((const uint8_t *)(a)), o)
@@ -85,6 +207,8 @@
 	load_frequent_const(inv_shift_row, shufmask_reg)
 #define aes_inv_shuf(shufmask_reg, a, o) \
 	vpshufb128(shufmask_reg, a, o)
+#define if_aes_subbytes(...) /*_*/
+#define if_not_aes_subbytes(...) __VA_ARGS__
 
 #define memory_barrier_with_vec(a) __asm__("" : "+w"(a) :: "memory")
 
@@ -111,6 +235,9 @@
 #define vpsrldq128(s, a, o)     (o = _mm_srli_si128(a, s))
 #define vpslldq128(s, a, o)     (o = _mm_slli_si128(a, s))
 
+#define vpsrl_byte_128(s, a, o) vpsrld128(s, a, o)
+#define vpsll_byte_128(s, a, o) vpslld128(s, a, o)
+
 #define vpaddb128(a, b, o)      (o = _mm_add_epi8(b, a))
 #define vpaddw128(a, b, o)      (o = _mm_add_epi16(b, a))
 #define vpaddd128(a, b, o)      (o = _mm_add_epi32(b, a))
@@ -136,6 +263,10 @@
 #define vmovd128(a, o)          (o = _mm_set_epi32(0, 0, 0, a))
 #define vmovq128(a, o)          (o = _mm_set_epi64x(0, a))
 
+#define vmovdqa128_memld(a, o)  (o = (*(const __m128i *)(a)))
+#define vmovdqa128_memst(a, o)  (*(__m128i *)(o) = (a))
+#define vpshufb128_amemld(m, a, o) vpshufb128(*(const __m128i *)(m), a, o)
+
 /* Following operations may have unaligned memory input */
 #define vmovdqu128_memld(a, o)  (o = _mm_loadu_si128((const __m128i *)(a)))
 #define vpxor128_memld(a, b, o) \
@@ -152,6 +283,8 @@
 	load_frequent_const(inv_shift_row, shufmask_reg)
 #define aes_inv_shuf(shufmask_reg, a, o) \
 	vpshufb128(shufmask_reg, a, o)
+#define if_aes_subbytes(...) /*_*/
+#define if_not_aes_subbytes(...) __VA_ARGS__
 
 #define memory_barrier_with_vec(a) __asm__("" : "+x"(a) :: "memory")
 
@@ -163,7 +296,7 @@
 #define filter_8bit(x, lo_t, hi_t, mask4bit, tmp0) \
 	vpand128(x, mask4bit, tmp0); \
 	vpandn128(x, mask4bit, x); \
-	vpsrld128(4, x, x); \
+	vpsrl_byte_128(4, x, x); \
 	\
 	vpshufb128(tmp0, lo_t, tmp0); \
 	vpshufb128(x, hi_t, x); \
@@ -187,11 +320,13 @@
 #define load_frequent_const(constant, o) vmovdqa128(constant ## _stack, o)
 
 #define prepare_frequent_const(constant) \
-	vmovdqa128(constant, constant ## _stack); \
+	vmovdqa128_memld(&(constant), constant ## _stack); \
 	memory_barrier_with_vec(constant ## _stack)
 
 #define prepare_frequent_constants() \
 	prepare_frequent_const(inv_shift_row); \
+	prepare_frequent_const(pack_bswap); \
+	prepare_frequent_const(shufb_16x16b); \
 	prepare_frequent_const(mask_0f); \
 	prepare_frequent_const(pre_tf_lo_s1); \
 	prepare_frequent_const(pre_tf_hi_s1); \
@@ -206,6 +341,8 @@
 
 #define frequent_constants_declare \
 	__m128i inv_shift_row_stack; \
+	__m128i pack_bswap_stack; \
+	__m128i shufb_16x16b_stack; \
 	__m128i mask_0f_stack; \
 	__m128i pre_tf_lo_s1_stack; \
 	__m128i pre_tf_hi_s1_stack; \
@@ -235,20 +372,22 @@
 	/* \
 	 * S-function with AES subbytes \
 	 */ \
-	aes_load_inv_shufmask(t4); \
+	if_not_aes_subbytes(aes_load_inv_shufmask(t4);) \
 	load_frequent_const(mask_0f, t7); \
 	load_frequent_const(pre_tf_lo_s1, t0); \
 	load_frequent_const(pre_tf_hi_s1, t1); \
 	\
 	/* AES inverse shift rows */ \
-	aes_inv_shuf(t4, x0, x0); \
-	aes_inv_shuf(t4, x7, x7); \
-	aes_inv_shuf(t4, x1, x1); \
-	aes_inv_shuf(t4, x4, x4); \
-	aes_inv_shuf(t4, x2, x2); \
-	aes_inv_shuf(t4, x5, x5); \
-	aes_inv_shuf(t4, x3, x3); \
-	aes_inv_shuf(t4, x6, x6); \
+	if_not_aes_subbytes( \
+	  aes_inv_shuf(t4, x0, x0); \
+	  aes_inv_shuf(t4, x7, x7); \
+	  aes_inv_shuf(t4, x1, x1); \
+	  aes_inv_shuf(t4, x4, x4); \
+	  aes_inv_shuf(t4, x2, x2); \
+	  aes_inv_shuf(t4, x5, x5); \
+	  aes_inv_shuf(t4, x3, x3); \
+	  aes_inv_shuf(t4, x6, x6); \
+	) \
 	\
 	/* prefilter sboxes 1, 2 and 3 */ \
 	load_frequent_const(pre_tf_lo_s4, t2); \
@@ -261,21 +400,33 @@
 	filter_8bit(x5, t0, t1, t7, t6); \
 	\
 	/* prefilter sbox 4 */ \
-	load_zero(t4); \
+	if_not_aes_subbytes(load_zero(t4);) \
 	filter_8bit(x3, t2, t3, t7, t6); \
 	filter_8bit(x6, t2, t3, t7, t6); \
 	\
 	/* AES subbytes + AES shift rows */ \
 	load_frequent_const(post_tf_lo_s1, t0); \
 	load_frequent_const(post_tf_hi_s1, t1); \
-	aes_subbytes_and_shuf_and_xor(t4, x0, x0); \
-	aes_subbytes_and_shuf_and_xor(t4, x7, x7); \
-	aes_subbytes_and_shuf_and_xor(t4, x1, x1); \
-	aes_subbytes_and_shuf_and_xor(t4, x4, x4); \
-	aes_subbytes_and_shuf_and_xor(t4, x2, x2); \
-	aes_subbytes_and_shuf_and_xor(t4, x5, x5); \
-	aes_subbytes_and_shuf_and_xor(t4, x3, x3); \
-	aes_subbytes_and_shuf_and_xor(t4, x6, x6); \
+	if_not_aes_subbytes( \
+	  aes_subbytes_and_shuf_and_xor(t4, x0, x0); \
+	  aes_subbytes_and_shuf_and_xor(t4, x7, x7); \
+	  aes_subbytes_and_shuf_and_xor(t4, x1, x1); \
+	  aes_subbytes_and_shuf_and_xor(t4, x4, x4); \
+	  aes_subbytes_and_shuf_and_xor(t4, x2, x2); \
+	  aes_subbytes_and_shuf_and_xor(t4, x5, x5); \
+	  aes_subbytes_and_shuf_and_xor(t4, x3, x3); \
+	  aes_subbytes_and_shuf_and_xor(t4, x6, x6); \
+	) \
+	if_aes_subbytes( \
+	  aes_subbytes(x0, x0); \
+	  aes_subbytes(x7, x7); \
+	  aes_subbytes(x1, x1); \
+	  aes_subbytes(x4, x4); \
+	  aes_subbytes(x2, x2); \
+	  aes_subbytes(x5, x5); \
+	  aes_subbytes(x3, x3); \
+	  aes_subbytes(x6, x6); \
+	) \
 	\
 	/* postfilter sboxes 1 and 4 */ \
 	load_frequent_const(post_tf_lo_s3, t2); \
@@ -589,7 +740,7 @@
 	transpose_4x4(c0, c1, c2, c3, a0, a1); \
 	transpose_4x4(d0, d1, d2, d3, a0, a1); \
 	\
-	vmovdqa128(shufb_16x16b, a0); \
+	vmovdqa128(shufb_16x16b_stack, a0); \
 	vmovdqa128(st1, a1); \
 	vpshufb128(a0, a2, a2); \
 	vpshufb128(a0, a3, a3); \
@@ -628,7 +779,7 @@
 #define inpack16_pre(x0, x1, x2, x3, x4, x5, x6, x7, y0, y1, y2, y3, y4, y5, \
 		     y6, y7, rio, key) \
 	vmovq128((key), x0); \
-	vpshufb128(pack_bswap, x0, x0); \
+	vpshufb128(pack_bswap_stack, x0, x0); \
 	\
 	vpxor128_memld((rio) + 0 * 16, x0, y7); \
 	vpxor128_memld((rio) + 1 * 16, x0, y6); \
@@ -679,7 +830,7 @@
 	vmovdqa128(x0, stack_tmp0); \
 	\
 	vmovq128((key), x0); \
-	vpshufb128(pack_bswap, x0, x0); \
+	vpshufb128(pack_bswap_stack, x0, x0); \
 	\
 	vpxor128(x0, y7, y7); \
 	vpxor128(x0, y6, y6); \
@@ -1026,13 +1177,13 @@ void camellia_decrypt_16blks_simd128(struct camellia_simd_ctx *ctx, void *vout,
 	vpand128(x, sbox4mask, t0); \
 	vpandn128(x, sbox4mask, x); \
 	vpaddw128(t0, t0, t1); \
-	vpsrlw128(7, t0, t0); \
+	vpsrl_byte_128(7, t0, t0); \
 	vpor128(t0, t1, t0); \
 	vpand128(sbox4mask, t0, t0); \
 	vpor128(t0, x, x); \
 	\
-	vmovdqa128(post_tf_lo_s1, t0); \
-	vmovdqa128(post_tf_hi_s1, t1); \
+	vmovdqa128_memld(&post_tf_lo_s1, t0); \
+	vmovdqa128_memld(&post_tf_hi_s1, t1); \
 	\
 	/* prefilter sboxes */ \
 	filter_8bit(x, pre_s1lo_mask, pre_s1hi_mask, _0f0f0f0fmask, t2); \
@@ -1046,22 +1197,22 @@ void camellia_decrypt_16blks_simd128(struct camellia_simd_ctx *ctx, void *vout,
 	/* output rotation for sbox2 (<<< 1) */ \
 	/* output rotation for sbox3 (>>> 1) */ \
 	aes_inv_shuf(inv_shift_row, x, t1); \
-	vpshufb128(sp0044440444044404mask, x, t4); \
-	vpshufb128(sp1110111010011110mask, x, x); \
+	vpshufb128_amemld(&sp0044440444044404mask, x, t4); \
+	vpshufb128_amemld(&sp1110111010011110mask, x, x); \
 	vpaddb128(t1, t1, t2); \
-	vpsrlw128(7, t1, t0); \
-	vpsllw128(7, t1, t3); \
+	vpsrl_byte_128(7, t1, t0); \
+	vpsll_byte_128(7, t1, t3); \
 	vpor128(t0, t2, t0); \
-	vpsrlw128(1, t1, t1); \
-	vpshufb128(sp0222022222000222mask, t0, t0); \
+	vpsrl_byte_128(1, t1, t1); \
+	vpshufb128_amemld(&sp0222022222000222mask, t0, t0); \
 	vpor128(t1, t3, t1); \
 	\
 	vpxor128(x, t4, t4); \
-	vpshufb128(sp3033303303303033mask, t1, t1); \
+	vpshufb128_amemld(&sp3033303303303033mask, t1, t1); \
 	vpxor128(t4, t0, t0); \
 	vpxor128(t1, t0, t0); \
 	vpsrldq128(8, t0, x); \
-	vpxor128(t0, x, x);
+	vpxor128(t0, x, x); \
 
 #define vec_rol128(in, out, nrol, t0) \
 	vpshufd128_0x4e(in, out); \
@@ -1148,13 +1299,13 @@ static void __camellia_avx_setup128(struct camellia_simd_ctx *ctx, __m128i x0)
 #define KL128 x0
 #define KA128 x2
 
-  vpshufb128(bswap128_mask, KL128, KL128);
+  vpshufb128_amemld(&bswap128_mask, KL128, KL128);
 
-  vmovdqa128(inv_shift_row_and_unpcklbw, x11);
+  vmovdqa128_memld(&inv_shift_row_and_unpcklbw, x11);
   vmovq128(sbox4_input_mask, x12);
-  vmovdqa128(mask_0f, x13);
-  vmovdqa128(pre_tf_lo_s1, x14);
-  vmovdqa128(pre_tf_hi_s1, x15);
+  vmovdqa128_memld(&mask_0f, x13);
+  vmovdqa128_memld(&pre_tf_lo_s1, x14);
+  vmovdqa128_memld(&pre_tf_hi_s1, x15);
 
   /*
    * Generate KA
@@ -1506,14 +1657,14 @@ static void __camellia_avx_setup256(struct camellia_simd_ctx *ctx, __m128i x0,
 #define KA128 x2
 #define KB128 x3
 
-  vpshufb128(bswap128_mask, KL128, KL128);
-  vpshufb128(bswap128_mask, KR128, KR128);
+  vpshufb128_amemld(&bswap128_mask, KL128, KL128);
+  vpshufb128_amemld(&bswap128_mask, KR128, KR128);
 
-  vmovdqa128(inv_shift_row_and_unpcklbw, x11);
+  vmovdqa128_memld(&inv_shift_row_and_unpcklbw, x11);
   vmovq128(*&sbox4_input_mask, x12);
-  vmovdqa128(mask_0f, x13);
-  vmovdqa128(pre_tf_lo_s1, x14);
-  vmovdqa128(pre_tf_hi_s1, x15);
+  vmovdqa128_memld(&mask_0f, x13);
+  vmovdqa128_memld(&pre_tf_lo_s1, x14);
+  vmovdqa128_memld(&pre_tf_hi_s1, x15);
 
   /*
    * Generate KA
