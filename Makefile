@@ -15,6 +15,7 @@ LDFLAGS = -lcrypto
 all: test_simd128_intrinsics_x86_64 \
      test_simd256_intrinsics_x86_64 test_simd256_intrinsics_x86_64_vaes \
      test_simd256_intrinsics_x86_64_vaes_avx512 \
+     test_simd256_intrinsics_x86_64_gfni_avx512 \
      test_simd128_asm_x86_64 test_simd256_asm_x86_64 \
      test_simd128_intrinsics_i386 test_simd256_intrinsics_i386 \
      test_simd128_intrinsics_aarch64
@@ -32,7 +33,8 @@ clean:
 	   test_simd128_asm_x86_64 \
 	   test_simd256_asm_x86_64 \
 	   test_simd256_intrinsics_x86_64_vaes \
-	   test_simd256_intrinsics_x86_64_vaes_avx512 || true
+	   test_simd256_intrinsics_x86_64_vaes_avx512 \
+	   test_simd256_intrinsics_x86_64_gfni_avx512 || true
 	rm camellia_simd128_with_x86_aesni_i386.o \
 	   camellia_simd128_with_x86_aesni_avx2_i386.o \
 	   camellia_simd256_x86_aesni_i386.o \
@@ -59,6 +61,11 @@ test_simd256_intrinsics_x86_64_vaes: camellia_simd128_with_x86_aesni_avx2.o \
 
 test_simd256_intrinsics_x86_64_vaes_avx512: camellia_simd128_with_x86_aesni_avx512.o \
 					    camellia_simd256_x86_vaes_avx512.o \
+					    main_simd256.o
+	$(CC_X86_64) $^ -o $@ $(LDFLAGS)
+
+test_simd256_intrinsics_x86_64_gfni_avx512: camellia_simd128_with_x86_aesni_avx512.o \
+					    camellia_simd256_x86_gfni_avx512.o \
 					    main_simd256.o
 	$(CC_X86_64) $^ -o $@ $(LDFLAGS)
 
@@ -101,6 +108,9 @@ camellia_simd256_x86_vaes.o: camellia_simd256_x86_aesni.c
 
 camellia_simd256_x86_vaes_avx512.o: camellia_simd256_x86_aesni.c
 	$(CC_X86_64) $(CFLAGS_SIMD256_X86_VAES_AVX512) -DUSE_VAES -c $< -o $@
+
+camellia_simd256_x86_gfni_avx512.o: camellia_simd256_x86_aesni.c
+	$(CC_X86_64) $(CFLAGS_SIMD256_X86_VAES_AVX512) -DUSE_GFNI -c $< -o $@
 
 camellia_simd128_x86-64_aesni_avx.o: camellia_simd128_x86-64_aesni_avx.S
 	$(CC_X86_64) $(CFLAGS) -c $< -o $@

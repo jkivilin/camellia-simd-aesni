@@ -1,11 +1,11 @@
 /*
- * Copyright (C) 2020 Jussi Kivilinna <jussi.kivilinna@iki.fi>
+ * Copyright (C) 2020,2022 Jussi Kivilinna <jussi.kivilinna@iki.fi>
  *
  * SPDX-License-Identifier: MIT
  */
 
 /*
- * AVX2 implementation of Camellia cipher, using AES-NI for sbox
+ * AVX2 implementation of Camellia cipher, using AES-NI/VAES/GFNI for sbox
  * calculations. This implementation takes 32 input blocks and process
  * them in parallel.
  *
@@ -54,19 +54,22 @@
 #define vmovd128_si256(a, o)    (o = _mm256_set_epi32(0, 0, 0, a, 0, 0, 0, a))
 #define vmovq128_si256(a, o)    (o = _mm256_set_epi64x(0, a, 0, a))
 
+#define vpbroadcastq(a, o)      (o = _mm256_set1_epi64x(a))
+
 /* Following operations may have unaligned memory input/output */
 #define vmovdqu256_memst(a, o)  _mm256_storeu_si256((__m256i *)(o), a)
 #define vpxor256_memld(a, b, o) \
 	vpxor256(b, _mm256_loadu_si256((const __m256i *)(a)), o)
 
-/* Macros for exposing SubBytes from AES-NI instruction set. */
-#if defined(vaesenclast256)
- #define aes_subbytes_and_shuf_and_xor(zero, a, o) \
+#ifndef USE_GFNI
+  /* Macros for exposing SubBytes from AES-NI/VAES instruction sets. */
+  #if defined(vaesenclast256)
+   #define aes_subbytes_and_shuf_and_xor(zero, a, o) \
          vaesenclast256(zero, a, o)
-#elif defined(vaesenclast128)
- /* Split 256-bit vector into two 128-bit and perform AES-NI on those, then
-  * merge result. */
- #define aes_subbytes_and_shuf_and_xor(zero, a, o) ({ \
+  #elif defined(vaesenclast128)
+   /* Split 256-bit vector into two 128-bit and perform AES-NI on those, then
+    * merge result. */
+   #define aes_subbytes_and_shuf_and_xor(zero, a, o) ({ \
 	    __m128i __aes_hi = _mm256_extracti128_si256(a, 1); \
 	    __m128i __aes_lo = _mm256_castsi256_si128(a); \
 	    __m128i __aes_zero = _mm256_castsi256_si128(zero); \
@@ -76,15 +79,73 @@
 	    __aes_lo256 = _mm256_castsi128_si256(__aes_lo); \
 	    o = _mm256_inserti128_si256(__aes_lo256, __aes_hi, 1); \
 	  })
-#endif
-#define aes_load_inv_shufmask(shufmask_reg) \
+  #endif
+  #define aes_load_inv_shufmask(shufmask_reg) \
 	vmovdqa256(inv_shift_row, shufmask_reg)
-#define aes_inv_shuf(shufmask_reg, a, o) \
+  #define aes_inv_shuf(shufmask_reg, a, o) \
 	vpshufb256(shufmask_reg, a, o)
+#endif /* !USE_GFNI */
+
+#ifdef USE_GFNI
+  /* GFNI macros */
+  #define vgf2p8affineqb(b, A, x, o) \
+	(o = _mm256_gf2p8affine_epi64_epi8(x, A, b))
+  #define vgf2p8affineinvqb(b, A, x, o) \
+	(o = _mm256_gf2p8affineinv_epi64_epi8(x, A, b))
+#endif /* USE_GFNI */
+
+/**********************************************************************
+  GFNI helper macros and constants
+ **********************************************************************/
+
+#ifdef USE_GFNI
+
+#define BV8(a0,a1,a2,a3,a4,a5,a6,a7) \
+	( (((a0) & 1) << 0) | \
+	  (((a1) & 1) << 1) | \
+	  (((a2) & 1) << 2) | \
+	  (((a3) & 1) << 3) | \
+	  (((a4) & 1) << 4) | \
+	  (((a5) & 1) << 5) | \
+	  (((a6) & 1) << 6) | \
+	  (((a7) & 1) << 7) )
+
+#define BM8X8(l0,l1,l2,l3,l4,l5,l6,l7) \
+	( ((uint64_t)(l7) << (0 * 8)) | \
+	  ((uint64_t)(l6) << (1 * 8)) | \
+	  ((uint64_t)(l5) << (2 * 8)) | \
+	  ((uint64_t)(l4) << (3 * 8)) | \
+	  ((uint64_t)(l3) << (4 * 8)) | \
+	  ((uint64_t)(l2) << (5 * 8)) | \
+	  ((uint64_t)(l1) << (6 * 8)) | \
+	  ((uint64_t)(l0) << (7 * 8)) )
+
+/* Pre-filters and post-filters constants for Camellia sboxes s1, s2, s3 and s4.
+ *   See http://urn.fi/URN:NBN:fi:oulu-201305311409, pages 43-48.
+ *
+ * Pre-filters are directly from above source, "θ₁"/"θ₄". Post-filters are
+ * combination of function "A" (AES SubBytes affine transformation) and
+ * "ψ₁"/"ψ₂"/"ψ₃".
+ */
+
+/* Constant from "θ₁(x)" and "θ₄(x)" functions. */
+#define pre_filter_constant_s1234 BV8(1, 0, 1, 0, 0, 0, 1, 0)
+
+/* Constant from "ψ₁(A(x))" function: */
+#define post_filter_constant_s14  BV8(0, 1, 1, 1, 0, 1, 1, 0)
+
+/* Constant from "ψ₂(A(x))" function: */
+#define post_filter_constant_s2   BV8(0, 0, 1, 1, 1, 0, 1, 1)
+
+/* Constant from "ψ₃(A(x))" function: */
+#define post_filter_constant_s3   BV8(1, 1, 1, 0, 1, 1, 0, 0)
+
+#endif /* USE_GFNI */
 
 /**********************************************************************
   helper macros
  **********************************************************************/
+#ifndef USE_GFNI
 #define filter_8bit(x, lo_t, hi_t, mask4bit, tmp0) \
 	vpand256(x, mask4bit, tmp0); \
 	vpandn256(x, mask4bit, x); \
@@ -93,6 +154,7 @@
 	vpshufb256(tmp0, lo_t, tmp0); \
 	vpshufb256(x, hi_t, x); \
 	vpxor256(tmp0, x, x);
+#endif /* !USE_GFNI */
 
 #define transpose_4x4(x0, x1, x2, x3, t1, t2) \
 	vpunpckhdq256(x1, x0, t2); \
@@ -113,7 +175,124 @@
   16-way camellia macros
  **********************************************************************/
 
+#ifdef USE_GFNI
+
 /*
+ * AES-NI/VAES version of round function.
+ *
+ * IN:
+ *   x0..x7: byte-sliced AB state
+ *   mem_cd: register pointer storing CD state
+ *   key: index for key material
+ * OUT:
+ *   x0..x7: new byte-sliced CD state
+ */
+#define roundsm16(x0, x1, x2, x3, x4, x5, x6, x7, t0, t1, t2, t3, t4, t5, t6, \
+		  t7, mem_cd, key) \
+	/* \
+	 * S-function with GFNI \
+	 */ \
+	vpbroadcastq(pre_filter_bitmatrix_s123, t5); \
+	vpbroadcastq(pre_filter_bitmatrix_s4, t2); \
+	vpbroadcastq(post_filter_bitmatrix_s14, t4); \
+	vpbroadcastq(post_filter_bitmatrix_s2, t3); \
+	vpbroadcastq(post_filter_bitmatrix_s3, t7); \
+	load_zero(t6); \
+	vmovq128_si256((key), t0); \
+	\
+	/* prefilter sboxes */ \
+	vgf2p8affineqb(pre_filter_constant_s1234, t5, x0, x0); \
+	vgf2p8affineqb(pre_filter_constant_s1234, t5, x7, x7); \
+	vgf2p8affineqb(pre_filter_constant_s1234, t2, x3, x3); \
+	vgf2p8affineqb(pre_filter_constant_s1234, t2, x6, x6); \
+	vgf2p8affineqb(pre_filter_constant_s1234, t5, x2, x2); \
+	vgf2p8affineqb(pre_filter_constant_s1234, t5, x5, x5); \
+	vgf2p8affineqb(pre_filter_constant_s1234, t5, x1, x1); \
+	vgf2p8affineqb(pre_filter_constant_s1234, t5, x4, x4); \
+	\
+	/* sbox GF8 inverse + postfilter sboxes 1 and 4 */ \
+	vgf2p8affineinvqb(post_filter_constant_s14, t4, x0, x0); \
+	vgf2p8affineinvqb(post_filter_constant_s14, t4, x7, x7); \
+	vgf2p8affineinvqb(post_filter_constant_s14, t4, x3, x3); \
+	vgf2p8affineinvqb(post_filter_constant_s14, t4, x6, x6); \
+	\
+	/* sbox GF8 inverse + postfilter sbox 3 */ \
+	vgf2p8affineinvqb(post_filter_constant_s3, t7, x2, x2); \
+	vgf2p8affineinvqb(post_filter_constant_s3, t7, x5, x5); \
+	\
+	/* sbox GF8 inverse + postfilter sbox 2 */ \
+	vgf2p8affineinvqb(post_filter_constant_s2, t3, x1, x1); \
+	vgf2p8affineinvqb(post_filter_constant_s2, t3, x4, x4); \
+	\
+	vpsrldq256(5, t0, t5); \
+	vpsrldq256(1, t0, t1); \
+	vpsrldq256(2, t0, t2); \
+	vpsrldq256(3, t0, t3); \
+	vpsrldq256(4, t0, t4); \
+	vpshufb256(t6, t0, t0); \
+	vpshufb256(t6, t1, t1); \
+	vpshufb256(t6, t2, t2); \
+	vpshufb256(t6, t3, t3); \
+	vpshufb256(t6, t4, t4); \
+	vpsrldq256(2, t5, t7); \
+	vpshufb256(t6, t7, t7); \
+	\
+	/* P-function */ \
+	vpxor256(x5, x0, x0); \
+	vpxor256(x6, x1, x1); \
+	vpxor256(x7, x2, x2); \
+	vpxor256(x4, x3, x3); \
+	\
+	vpxor256(x2, x4, x4); \
+	vpxor256(x3, x5, x5); \
+	vpxor256(x0, x6, x6); \
+	vpxor256(x1, x7, x7); \
+	\
+	vpxor256(x7, x0, x0); \
+	vpxor256(x4, x1, x1); \
+	vpxor256(x5, x2, x2); \
+	vpxor256(x6, x3, x3); \
+	\
+	vpxor256(x3, x4, x4); \
+	vpxor256(x0, x5, x5); \
+	vpxor256(x1, x6, x6); \
+	vpxor256(x2, x7, x7); /* note: high and low parts swapped */ \
+	\
+	/* Add key material and result to CD (x becomes new CD) */ \
+	\
+	vpxor256(t3, x4, x4); \
+	vpxor256(mem_cd[0], x4, x4); \
+	\
+	vpxor256(t2, x5, x5); \
+	vpxor256(mem_cd[1], x5, x5); \
+	\
+	vpsrldq256(1, t5, t3); \
+	vpshufb256(t6, t5, t5); \
+	vpshufb256(t6, t3, t6); \
+	\
+	vpxor256(t1, x6, x6); \
+	vpxor256(mem_cd[2], x6, x6); \
+	\
+	vpxor256(t0, x7, x7); \
+	vpxor256(mem_cd[3], x7, x7); \
+	\
+	vpxor256(t7, x0, x0); \
+	vpxor256(mem_cd[4], x0, x0); \
+	\
+	vpxor256(t6, x1, x1); \
+	vpxor256(mem_cd[5], x1, x1); \
+	\
+	vpxor256(t5, x2, x2); \
+	vpxor256(mem_cd[6], x2, x2); \
+	\
+	vpxor256(t4, x3, x3); \
+	vpxor256(mem_cd[7], x3, x3);
+
+#else /* USE_GFNI */
+
+/*
+ * AES-NI/VAES version of round function.
+ *
  * IN:
  *   x0..x7: byte-sliced AB state
  *   mem_cd: register pointer storing CD state
@@ -252,6 +431,8 @@
 	\
 	vpxor256(t4, x3, x3); \
 	vpxor256(mem_cd[7], x3, x3);
+
+#endif /* USE_GFNI */
 
 /*
  * IN/OUT:
@@ -674,6 +855,74 @@ static const __m256i pack_bswap =
   M256I_U32(0x00010203, 0x04050607, 0x0f0f0f0f, 0x0f0f0f0f,
 	    0x00010203, 0x04050607, 0x0f0f0f0f, 0x0f0f0f0f);
 
+#ifdef USE_GFNI
+
+/* Pre-filters and post-filters bit-matrixes for Camellia sboxes s1, s2, s3
+ * and s4.
+ *   See http://urn.fi/URN:NBN:fi:oulu-201305311409, pages 43-48.
+ *
+ * Pre-filters are directly from above source, "θ₁"/"θ₄". Post-filters are
+ * combination of function "A" (AES SubBytes affine transformation) and
+ * "ψ₁"/"ψ₂"/"ψ₃".
+ */
+
+/* Bit-matrix from "θ₁(x)" function: */
+static const uint64_t pre_filter_bitmatrix_s123 =
+	      BM8X8(BV8(1, 1, 1, 0, 1, 1, 0, 1),
+		    BV8(0, 0, 1, 1, 0, 0, 1, 0),
+		    BV8(1, 1, 0, 1, 0, 0, 0, 0),
+		    BV8(1, 0, 1, 1, 0, 0, 1, 1),
+		    BV8(0, 0, 0, 0, 1, 1, 0, 0),
+		    BV8(1, 0, 1, 0, 0, 1, 0, 0),
+		    BV8(0, 0, 1, 0, 1, 1, 0, 0),
+		    BV8(1, 0, 0, 0, 0, 1, 1, 0));
+
+/* Bit-matrix from "θ₄(x)" function: */
+static const uint64_t pre_filter_bitmatrix_s4 =
+	      BM8X8(BV8(1, 1, 0, 1, 1, 0, 1, 1),
+		    BV8(0, 1, 1, 0, 0, 1, 0, 0),
+		    BV8(1, 0, 1, 0, 0, 0, 0, 1),
+		    BV8(0, 1, 1, 0, 0, 1, 1, 1),
+		    BV8(0, 0, 0, 1, 1, 0, 0, 0),
+		    BV8(0, 1, 0, 0, 1, 0, 0, 1),
+		    BV8(0, 1, 0, 1, 1, 0, 0, 0),
+		    BV8(0, 0, 0, 0, 1, 1, 0, 1));
+
+/* Bit-matrix from "ψ₁(A(x))" function: */
+static const uint64_t post_filter_bitmatrix_s14 =
+	      BM8X8(BV8(0, 0, 0, 0, 0, 0, 0, 1),
+		    BV8(0, 1, 1, 0, 0, 1, 1, 0),
+		    BV8(1, 0, 1, 1, 1, 1, 1, 0),
+		    BV8(0, 0, 0, 1, 1, 0, 1, 1),
+		    BV8(1, 0, 0, 0, 1, 1, 1, 0),
+		    BV8(0, 1, 0, 1, 1, 1, 1, 0),
+		    BV8(0, 1, 1, 1, 1, 1, 1, 1),
+		    BV8(0, 0, 0, 1, 1, 1, 0, 0));
+
+/* Bit-matrix from "ψ₂(A(x))" function: */
+static const uint64_t post_filter_bitmatrix_s2 =
+	      BM8X8(BV8(0, 0, 0, 1, 1, 1, 0, 0),
+		    BV8(0, 0, 0, 0, 0, 0, 0, 1),
+		    BV8(0, 1, 1, 0, 0, 1, 1, 0),
+		    BV8(1, 0, 1, 1, 1, 1, 1, 0),
+		    BV8(0, 0, 0, 1, 1, 0, 1, 1),
+		    BV8(1, 0, 0, 0, 1, 1, 1, 0),
+		    BV8(0, 1, 0, 1, 1, 1, 1, 0),
+		    BV8(0, 1, 1, 1, 1, 1, 1, 1));
+
+/* Bit-matrix from "ψ₃(A(x))" function: */
+static const uint64_t post_filter_bitmatrix_s3 =
+	      BM8X8(BV8(0, 1, 1, 0, 0, 1, 1, 0),
+		    BV8(1, 0, 1, 1, 1, 1, 1, 0),
+		    BV8(0, 0, 0, 1, 1, 0, 1, 1),
+		    BV8(1, 0, 0, 0, 1, 1, 1, 0),
+		    BV8(0, 1, 0, 1, 1, 1, 1, 0),
+		    BV8(0, 1, 1, 1, 1, 1, 1, 1),
+		    BV8(0, 0, 0, 1, 1, 1, 0, 0),
+		    BV8(0, 0, 0, 0, 0, 0, 0, 1));
+
+#else /* USE_GFNI */
+
 /*
  * pre-SubByte transform
  *
@@ -822,6 +1071,7 @@ static const __m256i mask_0f =
   M256I_U32(0x0f0f0f0f, 0x0f0f0f0f, 0x0f0f0f0f, 0x0f0f0f0f,
 	    0x0f0f0f0f, 0x0f0f0f0f, 0x0f0f0f0f, 0x0f0f0f0f);
 
+#endif /* USE_GFNI */
 
 /* Encrypts 32 input block from IN and writes result to OUT. IN and OUT may
  * unaligned pointers. */
