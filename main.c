@@ -10,7 +10,7 @@
 #include <string.h>
 #include <assert.h>
 #include <time.h>
-#include <openssl/evp.h>
+#include "camellia-BSD-1.2.0/camellia.h"
 #include "camellia_simd.h"
 
 static const uint8_t test_vector_plaintext[] = {
@@ -53,50 +53,40 @@ static const uint8_t test_vector_ciphertext_256[] = {
 
 typedef struct
 {
-  EVP_CIPHER_CTX *enc_ctx;
-  EVP_CIPHER_CTX *dec_ctx;
+  KEY_TABLE_TYPE table;
+  int nbits;
 } CAMELLIA_KEY;
 
 static void Camellia_set_key(const void *key, int nbits, CAMELLIA_KEY *ctx)
 {
-  const EVP_CIPHER *algo;
-
-  if (ctx->enc_ctx == NULL)
-    ctx->enc_ctx = EVP_CIPHER_CTX_new();
-  assert(ctx->enc_ctx != NULL);
-
-  if (ctx->dec_ctx == NULL)
-    ctx->dec_ctx = EVP_CIPHER_CTX_new();
-  assert(ctx->dec_ctx != NULL);
-
-  if (nbits == 128)
-    algo = EVP_get_cipherbyname("camellia-128-ecb");
-  else if (nbits == 192)
-    algo = EVP_get_cipherbyname("camellia-192-ecb");
-  else
-    algo = EVP_get_cipherbyname("camellia-256-ecb");
-
-  assert(algo != NULL);
-  assert(EVP_EncryptInit_ex(ctx->enc_ctx, algo, NULL, key, NULL) == 1);
-  assert(EVP_DecryptInit_ex(ctx->dec_ctx, algo, NULL, key, NULL) == 1);
-  assert(EVP_CIPHER_CTX_set_padding(ctx->enc_ctx, 0) == 1);
-  assert(EVP_CIPHER_CTX_set_padding(ctx->dec_ctx, 0) == 1);
+  ctx->nbits = nbits;
+  Camellia_Ekeygen(nbits, key, ctx->table);
 }
 
 static void Camellia_encrypt_nblks(const void *src, void *dst, int nblks,
 				   CAMELLIA_KEY *ctx)
 {
-  int outlen;
-  assert(EVP_EncryptUpdate(ctx->enc_ctx, dst, &outlen, src, nblks * 16) == 1);
-  assert(outlen == nblks * 16);
+  int nbits = ctx->nbits;
+  while (nblks)
+  {
+    Camellia_EncryptBlock(nbits, src, ctx->table, dst);
+    src = (const uint8_t *)src + 16;
+    dst = (uint8_t *)dst + 16;
+    nblks--;
+  }
 }
 
 static void Camellia_decrypt_nblks(const void *src, void *dst, int nblks,
 				   CAMELLIA_KEY *ctx)
 {
-  int outlen;
-  assert(EVP_DecryptUpdate(ctx->dec_ctx, dst, &outlen, src, nblks * 16) == 1);
-  assert(outlen == nblks * 16);
+  int nbits = ctx->nbits;
+  while (nblks)
+  {
+    Camellia_DecryptBlock(nbits, src, ctx->table, dst);
+    src = (const uint8_t *)src + 16;
+    dst = (uint8_t *)dst + 16;
+    nblks--;
+  }
 }
 
 static void Camellia_encrypt(const void *src, void *dst, CAMELLIA_KEY *ctx)
@@ -315,9 +305,6 @@ static void do_selftest(void)
   }
   assert(memcmp(tmp, ref_large_plaintext, 32 * 16) == 0);
 #endif
-
-  EVP_CIPHER_CTX_free(ctx_ref.enc_ctx);
-  EVP_CIPHER_CTX_free(ctx_ref.dec_ctx);
 }
 
 static uint64_t curr_clock_nsecs(void)
@@ -449,15 +436,10 @@ static void do_speedtest(void)
   print_result("camellia-128 SIMD256 (32 blocks) decryption",
 	       total_bytes, end_time - start_time);
 #endif
-
-  EVP_CIPHER_CTX_free(ctx_ref.enc_ctx);
-  EVP_CIPHER_CTX_free(ctx_ref.dec_ctx);
 }
 
 int main(int argc, const char *argv[])
 {
-  OpenSSL_add_all_algorithms();
-
   printf("%s:\n", argv[0]);
 
   do_selftest();
