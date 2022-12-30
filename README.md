@@ -1,10 +1,10 @@
 # About
 This is repository, you find x86 (AES-NI, VAES, GFNI), ARMv8 Crypto Extension
-and POWER crypto instruction set accelerated vector implementations of
+and PowerPC crypto instruction set accelerated vector implementations of
 [Camellia cipher](https://info.isl.ntt.co.jp/crypt/eng/camellia/).
 For x86, both Intel C intrinsics and x86-64 assembly implementations are provided,
 with assembly yielding best performance and instrinsics implementation being
-easier to port to other instruction sets. For ARMv8/AArch64 and POWER/powerpc64le,
+easier to port to other instruction sets. For ARMv8/AArch64 and PowerPC,
 a 128-bit vector instrinsics implementation is provided.
 
 # How it works
@@ -28,10 +28,10 @@ CFB decryption, XTS, OCB, etc.
 The SIMD128 (128-bit vector) implementation variants process 16 blocks in parallel.
 
 - [camellia_simd128_with_aes_instruction_set.c](camellia_simd128_with_aes_instruction_set.c):
-  - C intrinsics implementation for x86 with AES-NI, for ARMv8 with Crypto Extension and for POWER with AES crypto instruction set.
+  - C intrinsics implementation for x86 with AES-NI, for ARMv8 with Crypto Extension and for PowerPC with AES crypto instruction set.
     - x86 implementation requires AES-NI and either SSE4.1 or AVX instruction set and gets best performance with x86-64 + AVX.
     - ARM implementation requires AArch64, NEON and ARMv8 crypto-extension instruction set.
-    - POWER implementation requires powerpc64le and AES crypto instruction set.
+    - PowerPC implementation requires VSX and AES crypto instruction set.
   - Includes vector intrinsics implementation of Camellia key-setup (for 128-bit, 192-bit and 256-bit keys).
   - On AMD Ryzen 3700X, when compiled for x86-64+AVX, this implementation is **~3.5 times faster** than
     reference.
@@ -70,8 +70,9 @@ The SIMD256 (256-bit vector) implementation variants process 32 blocks in parall
 - GCC x86-64
 - Optionally GCC i686
 - Optionally GCC aarch64
+- Optionally GCC powerpc64
 - Optionally GCC powerpc64le
-- Ubuntu 22.04 packages: gcc gcc-i686-linux-gnu gcc-aarch64-linux-gnu gcc-powerpc64le-linux-gnu make
+- Ubuntu 22.04 packages: gcc gcc-i686-linux-gnu gcc-aarch64-linux-gnu gcc-powerpc64le-linux-gnu gcc-powerpc64-linux-gnu make
 
 ## Compiling
 Clone repository and run 'make'…
@@ -112,10 +113,14 @@ powerpc64le-linux-gnu-gcc -O2 -Wall -mcpu=power8 -maltivec -mvsx -mcrypto -c cam
 powerpc64le-linux-gnu-gcc -O2 -Wall -mcpu=power8 -maltivec -mvsx -mcrypto -c main.c -o main_simd128_ppc64le.o
 powerpc64le-linux-gnu-gcc -O2 -Wall -mcpu=power8 -maltivec -mvsx -mcrypto -c camellia-BSD-1.2.0/camellia.c -o camellia_ref_ppc64le.o
 powerpc64le-linux-gnu-gcc camellia_simd128_with_ppc64le.o main_simd128_ppc64le.o camellia_ref_ppc64le.o -o test_simd128_intrinsics_ppc64le
+powerpc64-linux-gnu-gcc -O2 -Wall -mcpu=power8 -maltivec -mvsx -mcrypto -c camellia_simd128_with_aes_instruction_set.c -o camellia_simd128_with_ppc64be.o
+powerpc64-linux-gnu-gcc -O2 -Wall -mcpu=power8 -maltivec -mvsx -mcrypto -c main.c -o main_simd128_ppc64be.o
+powerpc64-linux-gnu-gcc -O2 -Wall -mcpu=power8 -maltivec -mvsx -mcrypto -c camellia-BSD-1.2.0/camellia.c -o camellia_ref_ppc64be.o
+powerpc64-linux-gnu-gcc camellia_simd128_with_ppc64be.o main_simd128_ppc64be.o camellia_ref_ppc64be.o -o test_simd128_intrinsics_ppc64be
 </pre>
 
 ## Testing
-Eleven executables are build. Run executables to verify implementation against test-vectors (with
+Twelve executables are build. Run executables to verify implementation against test-vectors (with
 128-bit, 192-bit and 256-bit key lengths) and benchmark against reference implementation from
 OpenSSL (with 128-bit key length).
 
@@ -124,7 +129,8 @@ Executables are:
 - `test_simd128_intrinsics_i386`: SIMD128 only, for testing intrinsics implementation on i386/AES-NI/AVX without AVX2.
 - `test_simd128_intrinsics_x86_64`: SIMD128 only, for testing intrinsics implementation on x86_64/AES-NI/AVX without AVX2.
 - `test_simd128_intrinsics_aarch64`: SIMD128 only, for testing intrinsics implementation on ARMv8 AArch64 with Crypto Extensions.
-- `test_simd128_intrinsics_ppc64le`: SIMD128 only, for testing intrinsics implementation on POWER/powerpc64le with crypto instruction set.
+- `test_simd128_intrinsics_ppc64be`: SIMD128 only, for testing intrinsics implementation on big-endian 64-bit PowerPC with crypto instruction set.
+- `test_simd128_intrinsics_ppc64le`: SIMD128 only, for testing intrinsics implementation on little-endian 64-bit PowerPC with crypto instruction set.
 - `test_simd256_asm_x86_64`: SIMD256 and SIMD128, for testing assembly x86-64/AES-NI/AVX2 implementations.
 - `test_simd256_intrinsics_i386`: SIMD256 and SIMD128, for testing intrinsics implementations on i386/AES-NI/AVX2.
 - `test_simd256_intrinsics_x86_64`: SIMD256 and SIMD128, for testing intrinsics implementation on x86_64/AES-NI/AVX2.

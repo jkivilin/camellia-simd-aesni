@@ -64,7 +64,12 @@ typedef unsigned char u8;
 
 typedef u32 u32_unaligned __attribute__((aligned(1), may_alias));
 
-#define SWAP(x) __builtin_bswap32(x)
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#  define SWAP(x) __builtin_bswap32(x)
+#else
+#  define SWAP(x) (x)
+# endif
+
 # define GETU32(p) SWAP(*((u32_unaligned *)(p)))
 # define PUTU32(ct, st) ({*((u32_unaligned *)(ct)) = SWAP((st));})
 

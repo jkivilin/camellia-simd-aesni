@@ -18,8 +18,7 @@
 #include <stdint.h>
 #include "camellia_simd.h"
 
-#if defined(__powerpc__) && defined(__VSX__) && defined(__CRYPTO__) && \
-    defined(_LITTLE_ENDIAN)
+#if defined(__powerpc__) && defined(__VSX__) && defined(__CRYPTO__)
 
 /**********************************************************************
   AT&T x86 asm to intrinsics conversion macros (PowerPC VSX+crypto)
@@ -33,7 +32,13 @@ typedef vector unsigned int uint32x4_t;
 typedef vector unsigned long long uint64x2_t;
 typedef uint64x2_t __m128i;
 
-#define vec_be_adjust(a)        ((__m128i)vec_reve((uint8x16_t)a))
+#define vec_bswap(a)            ((__m128i)vec_reve((uint8x16_t)a))
+
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+# define vec_be_adjust(a)      vec_bswap(a)
+#else
+# define vec_be_adjust(a)      ((__m128i)(a))
+#endif
 
 #define vpand128(a, b, o)       (o = vec_and(b, a))
 #define vpandn128(a, b, o)      (o = vec_andc(a, b))
@@ -42,24 +47,24 @@ typedef uint64x2_t __m128i;
 
 #define vpsrlb128(s, a, o)      ({ o = (__m128i)((uint8x16_t)a >> s); })
 #define vpsllb128(s, a, o)      ({ o = (__m128i)((uint8x16_t)a << s); })
-#define vpsrlw128(s, a, o)      ({ __m128i __tmpa = vec_be_adjust(a); \
+#define vpsrlw128(s, a, o)      ({ __m128i __tmpa = vec_bswap(a); \
 				   __tmpa = (__m128i)((uint16x8_t)__tmpa >> s); \
-				   o = vec_be_adjust(__tmpa);})
-#define vpsllw128(s, a, o)      ({ __m128i __tmpa = vec_be_adjust(a); \
+				   o = vec_bswap(__tmpa);})
+#define vpsllw128(s, a, o)      ({ __m128i __tmpa = vec_bswap(a); \
 				   __tmpa = (__m128i)((uint16x8_t)__tmpa << s); \
-				   o = vec_be_adjust(__tmpa);})
-#define vpsrld128(s, a, o)      ({ __m128i __tmpa = vec_be_adjust(a); \
+				   o = vec_bswap(__tmpa);})
+#define vpsrld128(s, a, o)      ({ __m128i __tmpa = vec_bswap(a); \
 				   __tmpa = (__m128i)((uint32x4_t)__tmpa >> s); \
-				   o = vec_be_adjust(__tmpa);})
-#define vpslld128(s, a, o)      ({ __m128i __tmpa = vec_be_adjust(a); \
+				   o = vec_bswap(__tmpa);})
+#define vpslld128(s, a, o)      ({ __m128i __tmpa = vec_bswap(a); \
 				   __tmpa = (__m128i)((uint32x4_t)__tmpa << s); \
-				   o = vec_be_adjust(__tmpa);})
-#define vpsrlq128(s, a, o)      ({ __m128i __tmpa = vec_be_adjust(a); \
+				   o = vec_bswap(__tmpa);})
+#define vpsrlq128(s, a, o)      ({ __m128i __tmpa = vec_bswap(a); \
 				   __tmpa = (__m128i)((uint64x2_t)__tmpa >> s); \
-				   o = vec_be_adjust(__tmpa);})
-#define vpsllq128(s, a, o)      ({ __m128i __tmpa = vec_be_adjust(a); \
+				   o = vec_bswap(__tmpa);})
+#define vpsllq128(s, a, o)      ({ __m128i __tmpa = vec_bswap(a); \
 				   __tmpa = (__m128i)((uint64x2_t)__tmpa << s); \
-				   o = vec_be_adjust(__tmpa);})
+				   o = vec_bswap(__tmpa);})
 #define vpsrldq128(s, a, o)     ({ uint64x2_t __tmp = { 0, 0 }; \
 				  o = (__m128i)vec_sld((uint8x16_t)a, \
 						       (uint8x16_t)__tmp, (s) & 15);})
@@ -71,24 +76,33 @@ typedef uint64x2_t __m128i;
 #define vpsll_byte_128(s, a, o) vpsllb128(s, a, o)
 
 #define vpaddb128(a, b, o)      (o = (__m128i)vec_add((uint8x16_t)b, (uint8x16_t)a))
-#define vpaddw128(a, b, o)      (o = (__m128i)vec_add((uint16x8_t)b, (uint16x8_t)a))
-#define vpaddd128(a, b, o)      (o = (__m128i)vec_add((uint32x4_t)b, (uint32x4_t)a))
-
-#define vpcmpeqd128(a, b, o)    (o = (__m128i)vec_cmpeq((uint32x4_t)b, (uint32x4_t)a))
 
 #define vpcmpgtb128(a, b, o)    (o = (__m128i)vec_cmpgt((int8x16_t)b, (int8x16_t)a))
 #define vpabsb128(a, o)         (o = (__m128i)vec_abs((int8x16_t)a))
 
 #define vpshufd128_0x4e(a, o)   (o = (__m128i)vec_reve((uint64x2_t)a))
 #define vpshufd128_0x1b(a, o)   (o = (__m128i)vec_reve((uint32x4_t)a))
-#define vpshufb128(m, a, o) \
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+# define vpshufb128(m, a, o) \
 	({ uint64x2_t __tmpz = { 0, 0 }; \
 	   o = (__m128i)vec_perm((uint8x16_t)__tmpz, (uint8x16_t)a, ~(uint8x16_t)m); })
+#else
+# define vpshufb128(m, a, o) \
+	({ uint64x2_t __tmpz = { 0, 0 }; \
+	   o = (__m128i)vec_perm((uint8x16_t)a, (uint8x16_t)__tmpz, (uint8x16_t)m); })
+#endif
 
-#define vpunpckhdq128(a, b, o)  (o = (__m128i)vec_mergeh((uint32x4_t)a, (uint32x4_t)b))
-#define vpunpckldq128(a, b, o)  (o = (__m128i)vec_mergel((uint32x4_t)a, (uint32x4_t)b))
-#define vpunpckhqdq128(a, b, o) (o = (__m128i)vec_mergeh((uint64x2_t)a, (uint64x2_t)b))
-#define vpunpcklqdq128(a, b, o) (o = (__m128i)vec_mergel((uint64x2_t)a, (uint64x2_t)b))
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+# define vpunpckhdq128(a, b, o)  (o = (__m128i)vec_mergeh((uint32x4_t)a, (uint32x4_t)b))
+# define vpunpckldq128(a, b, o)  (o = (__m128i)vec_mergel((uint32x4_t)a, (uint32x4_t)b))
+# define vpunpckhqdq128(a, b, o) (o = (__m128i)vec_mergeh((uint64x2_t)a, (uint64x2_t)b))
+# define vpunpcklqdq128(a, b, o) (o = (__m128i)vec_mergel((uint64x2_t)a, (uint64x2_t)b))
+#else
+# define vpunpckhdq128(a, b, o)  (o = (__m128i)vec_mergel((uint32x4_t)b, (uint32x4_t)a))
+# define vpunpckldq128(a, b, o)  (o = (__m128i)vec_mergeh((uint32x4_t)b, (uint32x4_t)a))
+# define vpunpckhqdq128(a, b, o) (o = (__m128i)vec_mergel((uint64x2_t)b, (uint64x2_t)a))
+# define vpunpcklqdq128(a, b, o) (o = (__m128i)vec_mergeh((uint64x2_t)b, (uint64x2_t)a))
+#endif
 
 /* PowerPC AES encrypt last round => ShiftRows + SubBytes + XOR round key  */
 #define vaesenclast128(a, b, o) (o = (__m128i)vec_cipherlast_be((uint8x16_t)b, (uint8x16_t)a))
@@ -164,10 +178,6 @@ typedef uint64x2_t __m128i;
 #define vpsll_byte_128(s, a, o) vpsllb128(s, a, o)
 
 #define vpaddb128(a, b, o)      (o = (__m128i)vaddq_u8((uint8x16_t)b, (uint8x16_t)a))
-#define vpaddw128(a, b, o)      (o = (__m128i)vaddq_u16((uint16x8_t)b, (uint16x8_t)a))
-#define vpaddd128(a, b, o)      (o = (__m128i)vaddq_u32((uint32x4_t)b, (uint32x4_t)a))
-
-#define vpcmpeqd128(a, b, o)    (o = (__m128i)vceqq_u32((uint32x4_t)b, (uint32x4_t)a))
 
 #define vpcmpgtb128(a, b, o)    (o = (__m128i)vcgtq_s8((int8x16_t)b, (int8x16_t)a))
 #define vpabsb128(a, o)         (o = (__m128i)vabsq_s8((int8x16_t)a))
@@ -239,10 +249,6 @@ typedef uint64x2_t __m128i;
 #define vpsll_byte_128(s, a, o) vpslld128(s, a, o)
 
 #define vpaddb128(a, b, o)      (o = _mm_add_epi8(b, a))
-#define vpaddw128(a, b, o)      (o = _mm_add_epi16(b, a))
-#define vpaddd128(a, b, o)      (o = _mm_add_epi32(b, a))
-
-#define vpcmpeqd128(a, b, o)    (o = _mm_cmpeq_epi32(b, a))
 
 #define vpcmpgtb128(a, b, o)    (o = _mm_cmpgt_epi8(b, a))
 #define vpabsb128(a, o)         (o = _mm_abs_epi8(a))
@@ -569,6 +575,14 @@ typedef uint64x2_t __m128i;
 	two_roundsm16(x0, x1, x2, x3, x4, x5, x6, x7, y0, y1, y2, y3, y4, y5, \
 		      y6, y7, mem_ab, mem_cd, (i) + 3, -1, dummy_store);
 
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+# define LE64_LO32(x) ((x) & 0xffffffffU)
+# define LE64_HI32(x) ((x >> 32) & 0xffffffffU)
+#else
+# define LE64_LO32(x) ((x >> 32) & 0xffffffffU)
+# define LE64_HI32(x) ((x) & 0xffffffffU)
+#endif
+
 /*
  * IN:
  *  v0..3: byte-sliced 32-bit integers
@@ -613,7 +627,7 @@ typedef uint64x2_t __m128i;
 	 * lr ^= rol32(t0, 1); \
 	 */ \
 	load_zero(tt0); \
-	vmovd128(*(kl) & 0xffffffff, t0); \
+	vmovd128(LE64_LO32(*(kl)), t0); \
 	vpshufb128(tt0, t0, t3); \
 	vpsrldq128(1, t0, t0); \
 	vpshufb128(tt0, t0, t2); \
@@ -644,7 +658,7 @@ typedef uint64x2_t __m128i;
 	 * rl ^= t2; \
 	 */ \
 	\
-	vmovd128(*(kr) >> 32, t0); \
+	vmovd128(LE64_HI32(*(kr)), t0); \
 	vpshufb128(tt0, t0, t3); \
 	vpsrldq128(1, t0, t0); \
 	vpshufb128(tt0, t0, t2); \
@@ -672,7 +686,7 @@ typedef uint64x2_t __m128i;
 	 * t2 &= rl; \
 	 * rr ^= rol32(t2, 1); \
 	 */ \
-	vmovd128(*(kr) & 0xffffffff, t0); \
+	vmovd128(LE64_LO32(*(kr)), t0); \
 	vpshufb128(tt0, t0, t3); \
 	vpsrldq128(1, t0, t0); \
 	vpshufb128(tt0, t0, t2); \
@@ -703,7 +717,7 @@ typedef uint64x2_t __m128i;
 	 * ll ^= t0; \
 	 */ \
 	\
-	vmovd128(*(kl) >> 32, t0); \
+	vmovd128(LE64_HI32(*(kl)), t0); \
 	vpshufb128(tt0, t0, t3); \
 	vpsrldq128(1, t0, t0); \
 	vpshufb128(tt0, t0, t2); \
@@ -871,32 +885,38 @@ typedef uint64x2_t __m128i;
 /**********************************************************************
   macros for defining constant vectors
  **********************************************************************/
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+# define SWAP_LE64(x) (x)
+#else
+# define SWAP_LE64(x) __builtin_bswap64(x)
+#endif
+
 #define M128I_BYTE(a0, a1, a2, a3, a4, a5, a6, a7, b0, b1, b2, b3, b4, b5, b6, b7) \
 	{ \
-	  (((a0) & 0xffULL) << 0) | \
-	  (((a1) & 0xffULL) << 8) | \
-	  (((a2) & 0xffULL) << 16) | \
-	  (((a3) & 0xffULL) << 24) | \
-	  (((a4) & 0xffULL) << 32) | \
-	  (((a5) & 0xffULL) << 40) | \
-	  (((a6) & 0xffULL) << 48) | \
-	  (((a7) & 0xffULL) << 56), \
-	  (((b0) & 0xffULL) << 0) | \
-	  (((b1) & 0xffULL) << 8) | \
-	  (((b2) & 0xffULL) << 16) | \
-	  (((b3) & 0xffULL) << 24) | \
-	  (((b4) & 0xffULL) << 32) | \
-	  (((b5) & 0xffULL) << 40) | \
-	  (((b6) & 0xffULL) << 48) | \
-	  (((b7) & 0xffULL) << 56) \
+	  SWAP_LE64((((a0) & 0xffULL) << 0) | \
+		    (((a1) & 0xffULL) << 8) | \
+		    (((a2) & 0xffULL) << 16) | \
+		    (((a3) & 0xffULL) << 24) | \
+		    (((a4) & 0xffULL) << 32) | \
+		    (((a5) & 0xffULL) << 40) | \
+		    (((a6) & 0xffULL) << 48) | \
+		    (((a7) & 0xffULL) << 56)), \
+	  SWAP_LE64((((b0) & 0xffULL) << 0) | \
+		    (((b1) & 0xffULL) << 8) | \
+		    (((b2) & 0xffULL) << 16) | \
+		    (((b3) & 0xffULL) << 24) | \
+		    (((b4) & 0xffULL) << 32) | \
+		    (((b5) & 0xffULL) << 40) | \
+		    (((b6) & 0xffULL) << 48) | \
+		    (((b7) & 0xffULL) << 56)) \
 	}
 
 #define M128I_U32(a0, a1, b0, b1) \
 	{ \
-	  (((a0) & 0xffffffffULL) << 0) | \
-	  (((a1) & 0xffffffffULL) << 32), \
-	  (((b0) & 0xffffffffULL) << 0) | \
-	  (((b1) & 0xffffffffULL) << 32) \
+	  SWAP_LE64((((a0) & 0xffffffffULL) << 0) | \
+		    (((a1) & 0xffffffffULL) << 32)), \
+	  SWAP_LE64((((b0) & 0xffffffffULL) << 0) | \
+		    (((b1) & 0xffffffffULL) << 32)) \
 	}
 
 #define SHUFB_BYTES(idx) \
@@ -1176,7 +1196,7 @@ void camellia_decrypt_16blks_simd128(struct camellia_simd_ctx *ctx, void *vout,
 	/* input rotation for sbox4 (<<< 1) */ \
 	vpand128(x, sbox4mask, t0); \
 	vpandn128(x, sbox4mask, x); \
-	vpaddw128(t0, t0, t1); \
+	vpaddb128(t0, t0, t1); \
 	vpsrl_byte_128(7, t0, t0); \
 	vpor128(t0, t1, t0); \
 	vpand128(sbox4mask, t0, t0); \
@@ -1218,30 +1238,30 @@ void camellia_decrypt_16blks_simd128(struct camellia_simd_ctx *ctx, void *vout,
 	vpshufd128_0x4e(in, out); \
 	vpsllq128((nrol), in, t0); \
 	vpsrlq128((64-(nrol)), out, out); \
-	vpaddd128(t0, out, out);
+	vpaddb128(t0, out, out);
 
 #define vec_ror128(in, out, nror, t0) \
 	vpshufd128_0x4e(in, out); \
 	vpsrlq128((nror), in, t0); \
 	vpsllq128((64-(nror)), out, out); \
-	vpaddd128(t0, out, out);
+	vpaddb128(t0, out, out);
 
 #define U64_BYTE(a0, a1, a2, a3, b0, b1, b2, b3) \
 	( \
-	  (((a0) & 0xffULL) << 0) | \
-	  (((a1) & 0xffULL) << 8) | \
-	  (((a2) & 0xffULL) << 16) | \
-	  (((a3) & 0xffULL) << 24) | \
-	  (((b0) & 0xffULL) << 32) | \
-	  (((b1) & 0xffULL) << 40) | \
-	  (((b2) & 0xffULL) << 48) | \
-	  (((b3) & 0xffULL) << 56) \
+	  SWAP_LE64((((a0) & 0xffULL) << 0) | \
+		    (((a1) & 0xffULL) << 8) | \
+		    (((a2) & 0xffULL) << 16) | \
+		    (((a3) & 0xffULL) << 24) | \
+		    (((b0) & 0xffULL) << 32) | \
+		    (((b1) & 0xffULL) << 40) | \
+		    (((b2) & 0xffULL) << 48) | \
+		    (((b3) & 0xffULL) << 56)) \
 	)
 
 #define U64_U32(a0, b0) \
 	( \
-	  (((a0) & 0xffffffffULL) << 0) | \
-	  (((b0) & 0xffffffffULL) << 32) \
+	  SWAP_LE64((((a0) & 0xffffffffULL) << 0) | \
+		    (((b0) & 0xffffffffULL) << 32)) \
 	)
 
 static const __m128i bswap128_mask =
@@ -1365,7 +1385,7 @@ static void __camellia_avx_setup128(struct camellia_simd_ctx *ctx, __m128i x0)
   vpand128(x15, x5, x14);
   vpslld128(1, x14, x11);
   vpsrld128(31, x14, x14);
-  vpaddd128(x11, x14, x14);
+  vpaddb128(x11, x14, x14);
   vpslldq128(8, x14, x14);
   vpsrldq128(12, x14, x14);
   vpxor128(x14, x15, x15);
@@ -1383,7 +1403,7 @@ static void __camellia_avx_setup128(struct camellia_simd_ctx *ctx, __m128i x0)
   vpand128(x15, x10, x14);
   vpslld128(1, x14, x11);
   vpsrld128(31, x14, x14);
-  vpaddd128(x11, x14, x14);
+  vpaddb128(x11, x14, x14);
   vpslldq128(8, x14, x14);
   vpsrldq128(12, x14, x14);
   vpxor128(x14, x15, x15);
@@ -1441,7 +1461,7 @@ static void __camellia_avx_setup128(struct camellia_simd_ctx *ctx, __m128i x0)
   vpand128(x15, x10, x14);
   vpslld128(1, x14, x11);
   vpsrld128(31, x14, x14);
-  vpaddd128(x11, x14, x14);
+  vpaddb128(x11, x14, x14);
   vpsrldq128(12, x14, x14);
   vpslldq128(8, x14, x14);
   vpxor128(x14, x15, x15);
@@ -1477,7 +1497,7 @@ static void __camellia_avx_setup128(struct camellia_simd_ctx *ctx, __m128i x0)
   vpand128(x15, x6, x14);
   vpslld128(1, x14, x11);
   vpsrld128(31, x14, x14);
-  vpaddd128(x11, x14, x14);
+  vpaddb128(x11, x14, x14);
   vpsrldq128(12, x14, x14);
   vpslldq128(8, x14, x14);
   vpxor128(x14, x15, x15);
@@ -1541,7 +1561,7 @@ static void __camellia_avx_setup128(struct camellia_simd_ctx *ctx, __m128i x0)
   vpand128(x8, x0, x15);
   vpslld128(1, x15, x14);
   vpsrld128(31, x15, x15);
-  vpaddd128(x14, x15, x15);
+  vpaddb128(x14, x15, x15);
   vpslldq128(12, x15, x15);
   vpsrldq128(8, x15, x15);
   vpxor128(x15, x0, x0);
@@ -1562,7 +1582,7 @@ static void __camellia_avx_setup128(struct camellia_simd_ctx *ctx, __m128i x0)
   vpand128(x9, x0, x1);
   vpslld128(1, x1, x2);
   vpsrld128(31, x1, x1);
-  vpaddd128(x2, x1, x1);
+  vpaddb128(x2, x1, x1);
   vpslldq128(12, x1, x1);
   vpsrldq128(8, x1, x1);
   vpxor128(x1, x0, x0);
@@ -1591,7 +1611,7 @@ static void __camellia_avx_setup128(struct camellia_simd_ctx *ctx, __m128i x0)
   vpand128(x6, x0, x1);
   vpslld128(1, x1, x2);
   vpsrld128(31, x1, x1);
-  vpaddd128(x2, x1, x1);
+  vpaddb128(x2, x1, x1);
   vpslldq128(12, x1, x1);
   vpsrldq128(8, x1, x1);
   vpxor128(x1, x0, x0);
@@ -1607,7 +1627,7 @@ static void __camellia_avx_setup128(struct camellia_simd_ctx *ctx, __m128i x0)
   vpand128(x7, x0, x1);
   vpslld128(1, x1, x2);
   vpsrld128(31, x1, x1);
-  vpaddd128(x2, x1, x1);
+  vpaddb128(x2, x1, x1);
   vpslldq128(12, x1, x1);
   vpsrldq128(8, x1, x1);
   vpxor128(x1, x0, x0);
@@ -1750,7 +1770,7 @@ static void __camellia_avx_setup256(struct camellia_simd_ctx *ctx, __m128i x0,
   vpand128(x15, x6, x14);
   vpslld128(1, x14, x13);
   vpsrld128(31, x14, x14);
-  vpaddd128(x13, x14, x14);
+  vpaddb128(x13, x14, x14);
   vpslldq128(8, x14, x14);
   vpsrldq128(12, x14, x14);
   vpxor128(x14, x15, x15);
@@ -1789,7 +1809,7 @@ static void __camellia_avx_setup256(struct camellia_simd_ctx *ctx, __m128i x0,
   vpand128(x15, x10, x14);
   vpslld128(1, x14, x13);
   vpsrld128(31, x14, x14);
-  vpaddd128(x13, x14, x14);
+  vpaddb128(x13, x14, x14);
   vpslldq128(8, x14, x14);
   vpsrldq128(12, x14, x14);
   vpxor128(x14, x15, x15);
@@ -1825,7 +1845,7 @@ static void __camellia_avx_setup256(struct camellia_simd_ctx *ctx, __m128i x0,
   vpand128(x15, x5, x14);
   vpslld128(1, x14, x13);
   vpsrld128(31, x14, x14);
-  vpaddd128(x13, x14, x14);
+  vpaddb128(x13, x14, x14);
   vpslldq128(8, x14, x14);
   vpsrldq128(12, x14, x14);
   vpxor128(x14, x15, x15);
@@ -1850,7 +1870,7 @@ static void __camellia_avx_setup256(struct camellia_simd_ctx *ctx, __m128i x0,
   vpand128(x15, x5, x14);
   vpslld128(1, x14, x13);
   vpsrld128(31, x14, x14);
-  vpaddd128(x13, x14, x14);
+  vpaddb128(x13, x14, x14);
   vpsrldq128(12, x14, x14);
   vpslldq128(8, x14, x14);
   vpxor128(x14, x15, x15);
@@ -1896,7 +1916,7 @@ static void __camellia_avx_setup256(struct camellia_simd_ctx *ctx, __m128i x0,
   vpand128(x15, x3, x14);
   vpslld128(1, x14, x13);
   vpsrld128(31, x14, x14);
-  vpaddd128(x13, x14, x14);
+  vpaddb128(x13, x14, x14);
   vpsrldq128(12, x14, x14);
   vpslldq128(8, x14, x14);
   vpxor128(x14, x15, x15);
@@ -1936,7 +1956,7 @@ static void __camellia_avx_setup256(struct camellia_simd_ctx *ctx, __m128i x0,
   vpand128(x15, x7, x14);
   vpslld128(1, x14, x13);
   vpsrld128(31, x14, x14);
-  vpaddd128(x13, x14, x14);
+  vpaddb128(x13, x14, x14);
   vpsrldq128(12, x14, x14);
   vpslldq128(8, x14, x14);
   vpxor128(x14, x15, x15);
@@ -1983,7 +2003,7 @@ static void __camellia_avx_setup256(struct camellia_simd_ctx *ctx, __m128i x0,
   vpand128(x8, x0, x15);
   vpslld128(1, x15, x14);
   vpsrld128(31, x15, x15);
-  vpaddd128(x14, x15, x15);
+  vpaddb128(x14, x15, x15);
   vpslldq128(12, x15, x15);
   vpsrldq128(8, x15, x15);
   vpxor128(x15, x0, x0);
@@ -2004,7 +2024,7 @@ static void __camellia_avx_setup256(struct camellia_simd_ctx *ctx, __m128i x0,
   vpand128(x9, x0, x1);
   vpslld128(1, x1, x2);
   vpsrld128(31, x1, x1);
-  vpaddd128(x2, x1, x1);
+  vpaddb128(x2, x1, x1);
   vpslldq128(12, x1, x1);
   vpsrldq128(8, x1, x1);
   vpxor128(x1, x0, x0);
@@ -2033,7 +2053,7 @@ static void __camellia_avx_setup256(struct camellia_simd_ctx *ctx, __m128i x0,
   vpand128(x6, x0, x1);
   vpslld128(1, x1, x2);
   vpsrld128(31, x1, x1);
-  vpaddd128(x2, x1, x1);
+  vpaddb128(x2, x1, x1);
   vpslldq128(12, x1, x1);
   vpsrldq128(8, x1, x1);
   vpxor128(x1, x0, x0);
@@ -2049,7 +2069,7 @@ static void __camellia_avx_setup256(struct camellia_simd_ctx *ctx, __m128i x0,
   vpand128(x7, x0, x1);
   vpslld128(1, x1, x2);
   vpsrld128(31, x1, x1);
-  vpaddd128(x2, x1, x1);
+  vpaddb128(x2, x1, x1);
   vpslldq128(12, x1, x1);
   vpsrldq128(8, x1, x1);
   vpxor128(x1, x0, x0);
@@ -2088,7 +2108,7 @@ static void __camellia_avx_setup256(struct camellia_simd_ctx *ctx, __m128i x0,
   vpand128(x4, x0, x15);
   vpslld128(1, x15, x14);
   vpsrld128(31, x15, x15);
-  vpaddd128(x14, x15, x15);
+  vpaddb128(x14, x15, x15);
   vpslldq128(12, x15, x15);
   vpsrldq128(8, x15, x15);
   vpxor128(x15, x0, x0);
@@ -2104,7 +2124,7 @@ static void __camellia_avx_setup256(struct camellia_simd_ctx *ctx, __m128i x0,
   vpand128(x5, x0, x15);
   vpslld128(1, x15, x14);
   vpsrld128(31, x15, x15);
-  vpaddd128(x14, x15, x15);
+  vpaddb128(x14, x15, x15);
   vpslldq128(12, x15, x15);
   vpsrldq128(8, x15, x15);
   vpxor128(x15, x0, x0);
@@ -2162,7 +2182,8 @@ int camellia_keysetup_simd128(struct camellia_simd_ctx *ctx, const void *vkey,
       vmovdqu128_memld(key, x0);
       vmovq128(*(uint64_unaligned_t *)(key + 16), x1);
 
-      vpcmpeqd128(x2, x2, x2);
+      x2[0] = -1;
+      x2[1] = -1;
       vpxor128(x1, x2, x2);
       vpslldq128(8, x2, x2);
       vpor128(x2, x1, x1);
