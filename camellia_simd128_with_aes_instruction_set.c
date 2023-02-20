@@ -18,7 +18,8 @@
 #include <stdint.h>
 #include "camellia_simd.h"
 
-#if defined(__powerpc__) && defined(__VSX__) && defined(__CRYPTO__)
+#if defined(__powerpc__) && defined(__VSX__) && defined(__CRYPTO__) && \
+    (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
 
 /**********************************************************************
   AT&T x86 asm to intrinsics conversion macros (PowerPC VSX+crypto)
@@ -34,11 +35,8 @@ typedef uint64x2_t __m128i;
 
 #define vec_bswap(a)            ((__m128i)vec_reve((uint8x16_t)a))
 
-#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-# define vec_be_adjust(a)      vec_bswap(a)
-#else
-# define vec_be_adjust(a)      ((__m128i)(a))
-#endif
+#define vec_le_adjust(a)        ((__m128i)(a))
+#define vec_be_adjust(a)        vec_bswap(a)
 
 #define vpand128(a, b, o)       (o = vec_and(b, a))
 #define vpandn128(a, b, o)      (o = vec_andc(a, b))
@@ -47,30 +45,18 @@ typedef uint64x2_t __m128i;
 
 #define vpsrlb128(s, a, o)      ({ o = (__m128i)((uint8x16_t)a >> s); })
 #define vpsllb128(s, a, o)      ({ o = (__m128i)((uint8x16_t)a << s); })
-#define vpsrlw128(s, a, o)      ({ __m128i __tmpa = vec_bswap(a); \
-				   __tmpa = (__m128i)((uint16x8_t)__tmpa >> s); \
-				   o = vec_bswap(__tmpa);})
-#define vpsllw128(s, a, o)      ({ __m128i __tmpa = vec_bswap(a); \
-				   __tmpa = (__m128i)((uint16x8_t)__tmpa << s); \
-				   o = vec_bswap(__tmpa);})
-#define vpsrld128(s, a, o)      ({ __m128i __tmpa = vec_bswap(a); \
-				   __tmpa = (__m128i)((uint32x4_t)__tmpa >> s); \
-				   o = vec_bswap(__tmpa);})
-#define vpslld128(s, a, o)      ({ __m128i __tmpa = vec_bswap(a); \
-				   __tmpa = (__m128i)((uint32x4_t)__tmpa << s); \
-				   o = vec_bswap(__tmpa);})
-#define vpsrlq128(s, a, o)      ({ __m128i __tmpa = vec_bswap(a); \
-				   __tmpa = (__m128i)((uint64x2_t)__tmpa >> s); \
-				   o = vec_bswap(__tmpa);})
-#define vpsllq128(s, a, o)      ({ __m128i __tmpa = vec_bswap(a); \
-				   __tmpa = (__m128i)((uint64x2_t)__tmpa << s); \
-				   o = vec_bswap(__tmpa);})
+#define vpsrlw128(s, a, o)      ({ o = (__m128i)((uint16x8_t)a >> s); })
+#define vpsllw128(s, a, o)      ({ o = (__m128i)((uint16x8_t)a << s); })
+#define vpsrld128(s, a, o)      ({ o = (__m128i)((uint32x4_t)a >> s); })
+#define vpslld128(s, a, o)      ({ o = (__m128i)((uint32x4_t)a << s); })
+#define vpsrlq128(s, a, o)      ({ o = (__m128i)((uint64x2_t)a >> s); })
+#define vpsllq128(s, a, o)      ({ o = (__m128i)((uint64x2_t)a << s); })
 #define vpsrldq128(s, a, o)     ({ uint64x2_t __tmp = { 0, 0 }; \
-				  o = (__m128i)vec_sld((uint8x16_t)a, \
-						       (uint8x16_t)__tmp, (s) & 15);})
-#define vpslldq128(s, a, o)     ({ uint64x2_t __tmp = { 0, 0 }; \
 				  o = (__m128i)vec_sld((uint8x16_t)__tmp, \
 						       (uint8x16_t)a, (16 - (s)) & 15);})
+#define vpslldq128(s, a, o)     ({ uint64x2_t __tmp = { 0, 0 }; \
+				  o = (__m128i)vec_sld((uint8x16_t)a, \
+						       (uint8x16_t)__tmp, (s) & 15);})
 
 #define vpsrl_byte_128(s, a, o) vpsrlb128(s, a, o)
 #define vpsll_byte_128(s, a, o) vpsllb128(s, a, o)
@@ -82,52 +68,42 @@ typedef uint64x2_t __m128i;
 
 #define vpshufd128_0x4e(a, o)   (o = (__m128i)vec_reve((uint64x2_t)a))
 #define vpshufd128_0x1b(a, o)   (o = (__m128i)vec_reve((uint32x4_t)a))
-#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-# define vpshufb128(m, a, o) \
-	({ uint64x2_t __tmpz = { 0, 0 }; \
-	   o = (__m128i)vec_perm((uint8x16_t)__tmpz, (uint8x16_t)a, ~(uint8x16_t)m); })
-#else
-# define vpshufb128(m, a, o) \
+
+#define vpshufb128(m, a, o) \
 	({ uint64x2_t __tmpz = { 0, 0 }; \
 	   o = (__m128i)vec_perm((uint8x16_t)a, (uint8x16_t)__tmpz, (uint8x16_t)m); })
-#endif
 
-#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-# define vpunpckhdq128(a, b, o)  (o = (__m128i)vec_mergeh((uint32x4_t)a, (uint32x4_t)b))
-# define vpunpckldq128(a, b, o)  (o = (__m128i)vec_mergel((uint32x4_t)a, (uint32x4_t)b))
-# define vpunpckhqdq128(a, b, o) (o = (__m128i)vec_mergeh((uint64x2_t)a, (uint64x2_t)b))
-# define vpunpcklqdq128(a, b, o) (o = (__m128i)vec_mergel((uint64x2_t)a, (uint64x2_t)b))
-#else
-# define vpunpckhdq128(a, b, o)  (o = (__m128i)vec_mergel((uint32x4_t)b, (uint32x4_t)a))
-# define vpunpckldq128(a, b, o)  (o = (__m128i)vec_mergeh((uint32x4_t)b, (uint32x4_t)a))
-# define vpunpckhqdq128(a, b, o) (o = (__m128i)vec_mergel((uint64x2_t)b, (uint64x2_t)a))
-# define vpunpcklqdq128(a, b, o) (o = (__m128i)vec_mergeh((uint64x2_t)b, (uint64x2_t)a))
-#endif
-
-/* PowerPC AES encrypt last round => ShiftRows + SubBytes + XOR round key  */
-#define vaesenclast128(a, b, o) (o = (__m128i)vec_cipherlast_be((uint8x16_t)b, (uint8x16_t)a))
+#define vpunpckhdq128(a, b, o)  (o = (__m128i)vec_mergel((uint32x4_t)b, (uint32x4_t)a))
+#define vpunpckldq128(a, b, o)  (o = (__m128i)vec_mergeh((uint32x4_t)b, (uint32x4_t)a))
+#define vpunpckhqdq128(a, b, o) (o = (__m128i)vec_mergel((uint64x2_t)b, (uint64x2_t)a))
+#define vpunpcklqdq128(a, b, o) (o = (__m128i)vec_mergeh((uint64x2_t)b, (uint64x2_t)a))
 
 #define vmovdqa128(a, o)        (o = a)
 #define vmovd128(a, o)          ({ uint32x4_t __tmp = { (a), 0, 0, 0 }; \
 				   o = (__builtin_constant_p(a) && ((a) == 0)) \
 				       ? (__m128i)__tmp \
-				       : vec_be_adjust(__tmp); })
+				       : vec_le_adjust(__tmp); })
 #define vmovq128(a, o)          ({ uint64x2_t __tmp = { (a), 0 }; \
 				   o = (__builtin_constant_p(a) && ((a) == 0)) \
 				       ? (__m128i)__tmp \
-				       : vec_be_adjust(__tmp); })
+				       : vec_le_adjust(__tmp); })
 
-#define vmovdqa128_memld(a, o)  (o = vec_be_adjust(*(const __m128i *)(a)))
-#define vmovdqa128_memst(a, o)  (*(__m128i *)(o) = vec_be_adjust(a))
-#define vpshufb128_amemld(m, a, o) vpshufb128(vec_be_adjust(*(const __m128i *)(m)), a, o)
+#define vmovdqa128_memld(a, o)  (o = vec_le_adjust(*(const __m128i *)(a)))
+#define vmovdqa128_memst(a, o)  (*(__m128i *)(o) = vec_le_adjust(a))
+#define vpshufb128_amemld(m, a, o) vpshufb128(vec_le_adjust(*(const __m128i *)(m)), a, o)
 
 /* Following operations may have unaligned memory input */
-#define vmovdqu128_memld(a, o)  (o = vec_be_adjust(vec_xl(0, (const uint8_t *)(a))))
-#define vpxor128_memld(a, b, o) vpxor128(b, vec_be_adjust(vec_xl(0, (const uint8_t *)(a))), o)
+#define vmovdqu128_memld(a, o)  (o = vec_le_adjust(vec_xl(0, (const uint8_t *)(a))))
+#define vpxor128_memld(a, b, o) vpxor128(b, vec_le_adjust(vec_xl(0, (const uint8_t *)(a))), o)
 
 /* Following operations may have unaligned memory output */
-#define vmovdqu128_memst(a, o)  vec_xst((uint8x16_t)vec_be_adjust(a), 0, (uint8_t *)(o))
-#define vmovq128_memst(a, o)    (((uint64_unaligned_t *)(o))[0] = (vec_be_adjust(a))[0])
+#define vmovdqu128_memst(a, o)  vec_xst((uint8x16_t)vec_le_adjust(a), 0, (uint8_t *)(o))
+#define vmovq128_memst(a, o)    (((uint64_unaligned_t *)(o))[0] = (vec_le_adjust(a))[0])
+
+/* PowerPC AES encrypt last round => ShiftRows + SubBytes + XOR round key  */
+#define vaesenclast128(a, b, o) (o = vec_be_adjust( \
+				      vec_cipherlast_be( \
+					(uint8x16_t)vec_be_adjust(b), (uint8x16_t)a)))
 
 /* Macros for exposing SubBytes from PowerPC crypto instructions. */
 #define aes_subbytes(a, o) \
@@ -575,13 +551,8 @@ typedef uint64x2_t __m128i;
 	two_roundsm16(x0, x1, x2, x3, x4, x5, x6, x7, y0, y1, y2, y3, y4, y5, \
 		      y6, y7, mem_ab, mem_cd, (i) + 3, -1, dummy_store);
 
-#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-# define LE64_LO32(x) ((x) & 0xffffffffU)
-# define LE64_HI32(x) ((x >> 32) & 0xffffffffU)
-#else
-# define LE64_LO32(x) ((x >> 32) & 0xffffffffU)
-# define LE64_HI32(x) ((x) & 0xffffffffU)
-#endif
+#define LE64_LO32(x) ((x) & 0xffffffffU)
+#define LE64_HI32(x) ((x >> 32) & 0xffffffffU)
 
 /*
  * IN:
@@ -885,11 +856,7 @@ typedef uint64x2_t __m128i;
 /**********************************************************************
   macros for defining constant vectors
  **********************************************************************/
-#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-# define SWAP_LE64(x) (x)
-#else
-# define SWAP_LE64(x) __builtin_bswap64(x)
-#endif
+#define SWAP_LE64(x) (x)
 
 #define M128I_BYTE(a0, a1, a2, a3, a4, a5, a6, a7, b0, b1, b2, b3, b4, b5, b6, b7) \
 	{ \
