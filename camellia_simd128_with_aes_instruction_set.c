@@ -420,25 +420,11 @@ static const uint8x16_t shift_row =
 	filter_8bit(x2, t2, t3, t7, t6); \
 	filter_8bit(x5, t2, t3, t7, t6); \
 	\
-	load_zero(t6); \
 	vmovq128((key), t0); \
 	\
 	/* postfilter sbox 2 */ \
 	filter_8bit(x1, t4, t5, t7, t2); \
 	filter_8bit(x4, t4, t5, t7, t2); \
-	\
-	vpsrldq128(5, t0, t5); \
-	vpsrldq128(1, t0, t1); \
-	vpsrldq128(2, t0, t2); \
-	vpsrldq128(3, t0, t3); \
-	vpsrldq128(4, t0, t4); \
-	vpshufb128(t6, t0, t0); \
-	vpshufb128(t6, t1, t1); \
-	vpshufb128(t6, t2, t2); \
-	vpshufb128(t6, t3, t3); \
-	vpshufb128(t6, t4, t4); \
-	vpsrldq128(2, t5, t7); \
-	vpshufb128(t6, t7, t7); \
 	\
 	/* P-function */ \
 	vpxor128(x5, x0, x0); \
@@ -463,15 +449,22 @@ static const uint8x16_t shift_row =
 	\
 	/* Add key material and result to CD (x becomes new CD) */ \
 	\
+	vpshufb128(bcast[7], t0, t7); \
+	vpshufb128(bcast[6], t0, t6); \
+	vpshufb128(bcast[5], t0, t5); \
+	vpshufb128(bcast[4], t0, t4); \
+	vpshufb128(bcast[3], t0, t3); \
+	vpshufb128(bcast[2], t0, t2); \
+	vpshufb128(bcast[1], t0, t1); \
+	\
 	vpxor128(t3, x4, x4); \
 	vpxor128(mem_cd[0], x4, x4); \
 	\
+	load_zero(t3); \
+	vpshufb128(t3, t0, t0); \
+	\
 	vpxor128(t2, x5, x5); \
 	vpxor128(mem_cd[1], x5, x5); \
-	\
-	vpsrldq128(1, t5, t3); \
-	vpshufb128(t6, t5, t5); \
-	vpshufb128(t6, t3, t6); \
 	\
 	vpxor128(t1, x6, x6); \
 	vpxor128(mem_cd[2], x6, x6); \
@@ -596,12 +589,9 @@ static const uint8x16_t shift_row =
 	load_zero(tt0); \
 	vmovd128(LE64_LO32(*(kl)), t0); \
 	vpshufb128(tt0, t0, t3); \
-	vpsrldq128(1, t0, t0); \
-	vpshufb128(tt0, t0, t2); \
-	vpsrldq128(1, t0, t0); \
-	vpshufb128(tt0, t0, t1); \
-	vpsrldq128(1, t0, t0); \
-	vpshufb128(tt0, t0, t0); \
+	vpshufb128(bcast[1], t0, t2); \
+	vpshufb128(bcast[2], t0, t1); \
+	vpshufb128(bcast[3], t0, t0); \
 	\
 	vpand128(l0, t0, t0); \
 	vpand128(l1, t1, t1); \
@@ -627,12 +617,9 @@ static const uint8x16_t shift_row =
 	\
 	vmovd128(LE64_HI32(*(kr)), t0); \
 	vpshufb128(tt0, t0, t3); \
-	vpsrldq128(1, t0, t0); \
-	vpshufb128(tt0, t0, t2); \
-	vpsrldq128(1, t0, t0); \
-	vpshufb128(tt0, t0, t1); \
-	vpsrldq128(1, t0, t0); \
-	vpshufb128(tt0, t0, t0); \
+	vpshufb128(bcast[1], t0, t2); \
+	vpshufb128(bcast[2], t0, t1); \
+	vpshufb128(bcast[3], t0, t0); \
 	\
 	vpor128(r[4], t0, t0); \
 	vpor128(r[5], t1, t1); \
@@ -655,12 +642,9 @@ static const uint8x16_t shift_row =
 	 */ \
 	vmovd128(LE64_LO32(*(kr)), t0); \
 	vpshufb128(tt0, t0, t3); \
-	vpsrldq128(1, t0, t0); \
-	vpshufb128(tt0, t0, t2); \
-	vpsrldq128(1, t0, t0); \
-	vpshufb128(tt0, t0, t1); \
-	vpsrldq128(1, t0, t0); \
-	vpshufb128(tt0, t0, t0); \
+	vpshufb128(bcast[1], t0, t2); \
+	vpshufb128(bcast[2], t0, t1); \
+	vpshufb128(bcast[3], t0, t0); \
 	\
 	vpand128(r[0], t0, t0); \
 	vpand128(r[1], t1, t1); \
@@ -686,12 +670,9 @@ static const uint8x16_t shift_row =
 	\
 	vmovd128(LE64_HI32(*(kl)), t0); \
 	vpshufb128(tt0, t0, t3); \
-	vpsrldq128(1, t0, t0); \
-	vpshufb128(tt0, t0, t2); \
-	vpsrldq128(1, t0, t0); \
-	vpshufb128(tt0, t0, t1); \
-	vpsrldq128(1, t0, t0); \
-	vpshufb128(tt0, t0, t0); \
+	vpshufb128(bcast[1], t0, t2); \
+	vpshufb128(bcast[2], t0, t1); \
+	vpshufb128(bcast[3], t0, t0); \
 	\
 	vpor128(l4, t0, t0); \
 	vpor128(l5, t1, t1); \
@@ -882,6 +863,8 @@ static const uint8x16_t shift_row =
 		    (((b1) & 0xffffffffULL) << 32)) \
 	}
 
+#define M128I_REP16(x) { (0x0101010101010101ULL * (x)), (0x0101010101010101ULL * (x)) }
+
 #define SHUFB_BYTES(idx) \
 	(((0 + (idx)) << 0)  | ((4 + (idx)) << 8) | \
 	 ((8 + (idx)) << 16) | ((12 + (idx)) << 24))
@@ -893,6 +876,12 @@ static const __m128i shufb_16x16b =
 
 static const __m128i pack_bswap =
   M128I_U32(0x00010203, 0x04050607, 0x0f0f0f0f, 0x0f0f0f0f);
+
+static const __m128i bcast[8] =
+{
+  M128I_REP16(0), M128I_REP16(1), M128I_REP16(2), M128I_REP16(3),
+  M128I_REP16(4), M128I_REP16(5), M128I_REP16(6), M128I_REP16(7)
+};
 
 /*
  * pre-SubByte transform
