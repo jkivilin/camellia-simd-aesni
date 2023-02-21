@@ -361,25 +361,11 @@
 	filter_8bit(x2, t2, t3, t7, t6); \
 	filter_8bit(x5, t2, t3, t7, t6); \
 	\
-	load_zero(t6); \
 	vmovq128_si256((key), t0); \
 	\
 	/* postfilter sbox 2 */ \
 	filter_8bit(x1, t4, t5, t7, t2); \
 	filter_8bit(x4, t4, t5, t7, t2); \
-	\
-	vpsrldq256(5, t0, t5); \
-	vpsrldq256(1, t0, t1); \
-	vpsrldq256(2, t0, t2); \
-	vpsrldq256(3, t0, t3); \
-	vpsrldq256(4, t0, t4); \
-	vpshufb256(t6, t0, t0); \
-	vpshufb256(t6, t1, t1); \
-	vpshufb256(t6, t2, t2); \
-	vpshufb256(t6, t3, t3); \
-	vpshufb256(t6, t4, t4); \
-	vpsrldq256(2, t5, t7); \
-	vpshufb256(t6, t7, t7); \
 	\
 	/* P-function */ \
 	vpxor256(x5, x0, x0); \
@@ -404,15 +390,22 @@
 	\
 	/* Add key material and result to CD (x becomes new CD) */ \
 	\
+	vpshufb256(bcast[7], t0, t7); \
+	vpshufb256(bcast[6], t0, t6); \
+	vpshufb256(bcast[5], t0, t5); \
+	vpshufb256(bcast[4], t0, t4); \
+	vpshufb256(bcast[3], t0, t3); \
+	vpshufb256(bcast[2], t0, t2); \
+	vpshufb256(bcast[1], t0, t1); \
+	\
 	vpxor256(t3, x4, x4); \
 	vpxor256(mem_cd[0], x4, x4); \
 	\
+	load_zero(t3); \
+	vpshufb256(t3, t0, t0); \
+	\
 	vpxor256(t2, x5, x5); \
 	vpxor256(mem_cd[1], x5, x5); \
-	\
-	vpsrldq256(1, t5, t3); \
-	vpshufb256(t6, t5, t5); \
-	vpshufb256(t6, t3, t6); \
 	\
 	vpxor256(t1, x6, x6); \
 	vpxor256(mem_cd[2], x6, x6); \
@@ -536,12 +529,9 @@
 	load_zero(tt0); \
 	vmovd128_si256(*(kl) & 0xffffffff, t0); \
 	vpshufb256(tt0, t0, t3); \
-	vpsrldq256(1, t0, t0); \
-	vpshufb256(tt0, t0, t2); \
-	vpsrldq256(1, t0, t0); \
-	vpshufb256(tt0, t0, t1); \
-	vpsrldq256(1, t0, t0); \
-	vpshufb256(tt0, t0, t0); \
+	vpshufb256(bcast[1], t0, t2); \
+	vpshufb256(bcast[2], t0, t1); \
+	vpshufb256(bcast[3], t0, t0); \
 	\
 	vpand256(l0, t0, t0); \
 	vpand256(l1, t1, t1); \
@@ -567,12 +557,9 @@
 	\
 	vmovd128_si256(*(kr) >> 32, t0); \
 	vpshufb256(tt0, t0, t3); \
-	vpsrldq256(1, t0, t0); \
-	vpshufb256(tt0, t0, t2); \
-	vpsrldq256(1, t0, t0); \
-	vpshufb256(tt0, t0, t1); \
-	vpsrldq256(1, t0, t0); \
-	vpshufb256(tt0, t0, t0); \
+	vpshufb256(bcast[1], t0, t2); \
+	vpshufb256(bcast[2], t0, t1); \
+	vpshufb256(bcast[3], t0, t0); \
 	\
 	vpor256(r[4], t0, t0); \
 	vpor256(r[5], t1, t1); \
@@ -595,12 +582,9 @@
 	 */ \
 	vmovd128_si256(*(kr) & 0xffffffff, t0); \
 	vpshufb256(tt0, t0, t3); \
-	vpsrldq256(1, t0, t0); \
-	vpshufb256(tt0, t0, t2); \
-	vpsrldq256(1, t0, t0); \
-	vpshufb256(tt0, t0, t1); \
-	vpsrldq256(1, t0, t0); \
-	vpshufb256(tt0, t0, t0); \
+	vpshufb256(bcast[1], t0, t2); \
+	vpshufb256(bcast[2], t0, t1); \
+	vpshufb256(bcast[3], t0, t0); \
 	\
 	vpand256(r[0], t0, t0); \
 	vpand256(r[1], t1, t1); \
@@ -626,12 +610,9 @@
 	\
 	vmovd128_si256(*(kl) >> 32, t0); \
 	vpshufb256(tt0, t0, t3); \
-	vpsrldq256(1, t0, t0); \
-	vpshufb256(tt0, t0, t2); \
-	vpsrldq256(1, t0, t0); \
-	vpshufb256(tt0, t0, t1); \
-	vpsrldq256(1, t0, t0); \
-	vpshufb256(tt0, t0, t0); \
+	vpshufb256(bcast[1], t0, t2); \
+	vpshufb256(bcast[2], t0, t1); \
+	vpshufb256(bcast[3], t0, t0); \
 	\
 	vpor256(l4, t0, t0); \
 	vpor256(l5, t1, t1); \
@@ -841,6 +822,14 @@
 	  (((d1) & 0xffffffffULL) << 32) \
 	}
 
+#define M256I_REP32(x) \
+	{ \
+	  (0x0101010101010101ULL * (x)), \
+	  (0x0101010101010101ULL * (x)), \
+	  (0x0101010101010101ULL * (x)), \
+	  (0x0101010101010101ULL * (x)) \
+	}
+
 #define SHUFB_BYTES(idx) \
 	(((0 + (idx)) << 0)  | ((4 + (idx)) << 8) | \
 	 ((8 + (idx)) << 16) | ((12 + (idx)) << 24))
@@ -854,6 +843,12 @@ static const __m256i shufb_16x16b =
 static const __m256i pack_bswap =
   M256I_U32(0x00010203, 0x04050607, 0x0f0f0f0f, 0x0f0f0f0f,
 	    0x00010203, 0x04050607, 0x0f0f0f0f, 0x0f0f0f0f);
+
+static const __m256i bcast[8] =
+{
+  M256I_REP32(0), M256I_REP32(1), M256I_REP32(2), M256I_REP32(3),
+  M256I_REP32(4), M256I_REP32(5), M256I_REP32(6), M256I_REP32(7)
+};
 
 #ifdef USE_GFNI
 
