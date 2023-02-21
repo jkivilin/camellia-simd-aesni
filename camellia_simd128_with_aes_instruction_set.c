@@ -35,9 +35,6 @@ typedef uint64x2_t __m128i;
 
 #define vec_bswap(a)            ((__m128i)vec_reve((uint8x16_t)a))
 
-#define vec_le_adjust(a)        ((__m128i)(a))
-#define vec_be_adjust(a)        vec_bswap(a)
-
 #define vpand128(a, b, o)       (o = vec_and(b, a))
 #define vpandn128(a, b, o)      (o = vec_andc(a, b))
 #define vpxor128(a, b, o)       (o = vec_xor(b, a))
@@ -80,40 +77,39 @@ typedef uint64x2_t __m128i;
 
 #define vmovdqa128(a, o)        (o = a)
 #define vmovd128(a, o)          ({ uint32x4_t __tmp = { (a), 0, 0, 0 }; \
-				   o = (__builtin_constant_p(a) && ((a) == 0)) \
-				       ? (__m128i)__tmp \
-				       : vec_le_adjust(__tmp); })
+				   o = (__m128i)(__tmp); })
 #define vmovq128(a, o)          ({ uint64x2_t __tmp = { (a), 0 }; \
-				   o = (__builtin_constant_p(a) && ((a) == 0)) \
-				       ? (__m128i)__tmp \
-				       : vec_le_adjust(__tmp); })
+				   o = (__m128i)(__tmp); })
 
-#define vmovdqa128_memld(a, o)  (o = vec_le_adjust(*(const __m128i *)(a)))
-#define vmovdqa128_memst(a, o)  (*(__m128i *)(o) = vec_le_adjust(a))
-#define vpshufb128_amemld(m, a, o) vpshufb128(vec_le_adjust(*(const __m128i *)(m)), a, o)
+#define vmovdqa128_memld(a, o)  (o = *(const __m128i *)(a))
+#define vmovdqa128_memst(a, o)  (*(__m128i *)(o) = (a))
+#define vpshufb128_amemld(m, a, o) vpshufb128(*(const __m128i *)(m), a, o)
 
 /* Following operations may have unaligned memory input */
-#define vmovdqu128_memld(a, o)  (o = vec_le_adjust(vec_xl(0, (const uint8_t *)(a))))
-#define vpxor128_memld(a, b, o) vpxor128(b, vec_le_adjust(vec_xl(0, (const uint8_t *)(a))), o)
+#define vmovdqu128_memld(a, o)  (o = (__m128i)vec_xl(0, (const uint8_t *)(a)))
+#define vpxor128_memld(a, b, o) vpxor128(b, (__m128i)vec_xl(0, (const uint8_t *)(a)), o)
 
 /* Following operations may have unaligned memory output */
-#define vmovdqu128_memst(a, o)  vec_xst((uint8x16_t)vec_le_adjust(a), 0, (uint8_t *)(o))
-#define vmovq128_memst(a, o)    (((uint64_unaligned_t *)(o))[0] = (vec_le_adjust(a))[0])
+#define vmovdqu128_memst(a, o)  vec_xst((uint8x16_t)(a), 0, (uint8_t *)(o))
+#define vmovq128_memst(a, o)    (((uint64_unaligned_t *)(o))[0] = ((__m128i)(a))[0])
 
 /* PowerPC AES encrypt last round => ShiftRows + SubBytes + XOR round key  */
-#define vaesenclast128(a, b, o) (o = vec_be_adjust( \
-				      vec_cipherlast_be( \
-					(uint8x16_t)vec_be_adjust(b), (uint8x16_t)a)))
+static const uint8x16_t shift_row =
+  { 0, 5, 10, 15, 4, 9, 14, 3, 8, 13, 2, 7, 12, 1, 6, 11 };
+#define vaesenclast128(a, b, o) \
+	({ uint64x2_t __tmp = (__m128i)vec_sbox_be((uint8x16_t)(b)); \
+	   vpshufb128(shift_row, __tmp, __tmp); \
+	   vpxor128(a, __tmp, o); })
 
 /* Macros for exposing SubBytes from PowerPC crypto instructions. */
 #define aes_subbytes(a, o) \
-	(o = (__m128i)vec_sbox_be((uint8x16_t)a))
+	(o = (__m128i)vec_sbox_be((uint8x16_t)(a)))
 #define aes_subbytes_and_shuf_and_xor(zero, a, o) \
-        vaesenclast128(zero, a, o)
-#define aes_load_inv_shufmask(shufmask_reg) \
-	load_frequent_const(inv_shift_row, shufmask_reg)
+        vaesenclast128((zero), (a), (o))
+/*#define aes_load_inv_shufmask(shufmask_reg) \
+	load_frequent_const(inv_shift_row, (shufmask_reg))*/
 #define aes_inv_shuf(shufmask_reg, a, o) \
-	vpshufb128(shufmask_reg, a, o)
+	vpshufb128(shufmask_reg, (a), (o))
 #define if_aes_subbytes(...) __VA_ARGS__
 #define if_not_aes_subbytes(...) /*_*/
 
