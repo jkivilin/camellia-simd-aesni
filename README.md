@@ -33,26 +33,25 @@ The SIMD128 (128-bit vector) implementation variants process 16 blocks in parall
     - ARM implementation requires AArch64, NEON and ARMv8 crypto-extension instruction set.
     - PowerPC implementation requires VSX and AES crypto instruction set.
   - Includes vector intrinsics implementation of Camellia key-setup (for 128-bit, 192-bit and 256-bit keys).
-  - On AMD Ryzen 3700X, when compiled for x86-64+AVX, this implementation is **~3.5 times faster** than
-    reference.
+  - On Intel Core i5-6500 (skylake), this implementation is **~3.5 times faster** than reference.
+  - On POWER9/ppc64le, this implementation is **~2.4 times faster** than reference.
 
 - [camellia_simd128_x86-64_aesni_avx.S](camellia_simd128_x86-64_aesni_avx.S):
   - GCC assembly implementation for x86-64 with AES-NI and AVX.
   - Includes vector assembly implementation of Camellia key-setup (for 128-bit, 192-bit and 256-bit keys).
-  - On AMD Ryzen 3700X, this implementation is **~4.1 times faster** than reference.
-  - On Intel Haswell, CTR-mode adaptation runs at **5.93 cycles/byte**
-    [*](https://github.com/jkivilin/supercop-blockciphers).
+  - On Intel Core i5-6500 (skylake), this implementation is **~3.6 times faster** than reference.
+  - On AMD Ryzen 9 7900X (zen4), this implementation is **~4.5 times faster** than reference.
 
 ## SIMD256
 The SIMD256 (256-bit vector) implementation variants process 32 blocks in parallel.
 - [camellia_simd256_x86_aesni.c](camellia_simd256_x86_aesni.c):
   - Intel C intrinsics implentation for x86 with AES-NI or VAES or GFNI. Requires either AVX2 instruction set and gets best
   performance with x86-64 + AVX512 + GFNI.
-  - On AMD Ryzen 7 3700X, when compiled for **x86-64+AVX2+AES-NI**, this implementation is **~5.9 times faster** than
+  - On Intel Core i5-6500 (skylake), when compiled for **x86-64+AVX2+AES-NI**, this implementation is **~5.4 times faster** than
     reference.
-  - On AMD Ryzen 9 7900X, when compiled for **x86-64+AVX512+VAES**, this implementation is **~8.6 times faster** than
+  - On AMD Ryzen 9 7900X (zen4), when compiled for **x86-64+AVX512+VAES**, this implementation is **~8.9 times faster** than
     reference.
-  - On AMD Ryzen 9 7900X, when compiled for **x86-64+AVX512+GFNI**, this implementation is **~18.1 times faster** than
+  - On AMD Ryzen 9 7900X (zen4), when compiled for **x86-64+AVX512+GFNI**, this implementation is **~18.7 times faster** than
     reference.
 
 - [camellia_simd256_x86-64_aesni_avx2.S](camellia_simd256_x86-64_aesni_avx2.S):
