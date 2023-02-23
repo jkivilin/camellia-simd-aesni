@@ -27,6 +27,7 @@
 /**********************************************************************
   helper macros
  **********************************************************************/
+#ifndef USE_GFNI
 #define filter_8bit(x, lo_t, hi_t, mask4bit, tmp0) \
 	vpand x, mask4bit, tmp0; \
 	vpandn x, mask4bit, x; \
@@ -35,6 +36,7 @@
 	vpshufb tmp0, lo_t, tmp0; \
 	vpshufb x, hi_t, x; \
 	vpxor tmp0, x, x;
+#endif
 
 #define ymm0_x xmm0
 #define ymm1_x xmm1
@@ -53,11 +55,69 @@
 #define ymm14_x xmm14
 #define ymm15_x xmm15
 
+#ifdef USE_VAES
+# define IF_AESNI(...)
+# define IF_VAES(...) __VA_ARGS__
+#else
+# define IF_AESNI(...) __VA_ARGS__
+# define IF_VAES(...)
+#endif
+
 /**********************************************************************
   32-way camellia
  **********************************************************************/
 
-/*
+/**********************************************************************
+  GFNI helper macros and constants
+ **********************************************************************/
+
+#ifdef USE_GFNI
+
+#define BV8(a0,a1,a2,a3,a4,a5,a6,a7) \
+	( (((a0) & 1) << 0) | \
+	  (((a1) & 1) << 1) | \
+	  (((a2) & 1) << 2) | \
+	  (((a3) & 1) << 3) | \
+	  (((a4) & 1) << 4) | \
+	  (((a5) & 1) << 5) | \
+	  (((a6) & 1) << 6) | \
+	  (((a7) & 1) << 7) )
+
+#define BM8X8(l0,l1,l2,l3,l4,l5,l6,l7) \
+	( ((l7) << (0 * 8)) | \
+	  ((l6) << (1 * 8)) | \
+	  ((l5) << (2 * 8)) | \
+	  ((l4) << (3 * 8)) | \
+	  ((l3) << (4 * 8)) | \
+	  ((l2) << (5 * 8)) | \
+	  ((l1) << (6 * 8)) | \
+	  ((l0) << (7 * 8)) )
+
+/* Pre-filters and post-filters constants for Camellia sboxes s1, s2, s3 and s4.
+ *   See http://urn.fi/URN:NBN:fi:oulu-201305311409, pages 43-48.
+ *
+ * Pre-filters are directly from above source, "θ₁"/"θ₄". Post-filters are
+ * combination of function "A" (AES SubBytes affine transformation) and
+ * "ψ₁"/"ψ₂"/"ψ₃".
+ */
+
+/* Constant from "θ₁(x)" and "θ₄(x)" functions. */
+#define pre_filter_constant_s1234 BV8(1, 0, 1, 0, 0, 0, 1, 0)
+
+/* Constant from "ψ₁(A(x))" function: */
+#define post_filter_constant_s14  BV8(0, 1, 1, 1, 0, 1, 1, 0)
+
+/* Constant from "ψ₂(A(x))" function: */
+#define post_filter_constant_s2   BV8(0, 0, 1, 1, 1, 0, 1, 1)
+
+/* Constant from "ψ₃(A(x))" function: */
+#define post_filter_constant_s3   BV8(1, 1, 1, 0, 1, 1, 0, 0)
+
+#endif /* USE_GFNI */
+
+#ifdef USE_GFNI
+
+/* roundsm32 (GFNI version)
  * IN:
  *   x0..x7: byte-sliced AB state
  *   mem_cd: register pointer storing CD state
@@ -65,8 +125,112 @@
  * OUT:
  *   x0..x7: new byte-sliced CD state
  */
-#define roundsm32(x0, x1, x2, x3, x4, x5, x6, x7, t0, t1, t2, t3, t4, t5, t6, \
-		  t7, mem_cd, key) \
+#define roundsm32(x0, x1, x2, x3, x4, x5, x6, x7, t0, t1, t2, t3, t4, t5, \
+		  t6, t7, mem_cd, key) \
+	/* \
+	 * S-function with AES subbytes \
+	 */ \
+	vpbroadcastq .Lpre_filter_bitmatrix_s123(%rip), t5; \
+	vpbroadcastq .Lpre_filter_bitmatrix_s4(%rip), t2; \
+	vpbroadcastq .Lpost_filter_bitmatrix_s14(%rip), t4; \
+	vpbroadcastq .Lpost_filter_bitmatrix_s2(%rip), t3; \
+	vpbroadcastq .Lpost_filter_bitmatrix_s3(%rip), t6; \
+	\
+	/* prefilter sboxes */ \
+	vgf2p8affineqb $(pre_filter_constant_s1234), t5, x0, x0; \
+	vgf2p8affineqb $(pre_filter_constant_s1234), t5, x7, x7; \
+	vgf2p8affineqb $(pre_filter_constant_s1234), t2, x3, x3; \
+	vgf2p8affineqb $(pre_filter_constant_s1234), t2, x6, x6; \
+	vgf2p8affineqb $(pre_filter_constant_s1234), t5, x2, x2; \
+	vgf2p8affineqb $(pre_filter_constant_s1234), t5, x5, x5; \
+	vgf2p8affineqb $(pre_filter_constant_s1234), t5, x1, x1; \
+	vgf2p8affineqb $(pre_filter_constant_s1234), t5, x4, x4; \
+	\
+	/* sbox GF8 inverse + postfilter sboxes 1 and 4 */ \
+	vgf2p8affineinvqb $(post_filter_constant_s14), t4, x0, x0; \
+	vgf2p8affineinvqb $(post_filter_constant_s14), t4, x7, x7; \
+	vgf2p8affineinvqb $(post_filter_constant_s14), t4, x3, x3; \
+	vgf2p8affineinvqb $(post_filter_constant_s14), t4, x6, x6; \
+	\
+	/* sbox GF8 inverse + postfilter sbox 3 */ \
+	vgf2p8affineinvqb $(post_filter_constant_s3), t6, x2, x2; \
+	vgf2p8affineinvqb $(post_filter_constant_s3), t6, x5, x5; \
+	\
+	/* sbox GF8 inverse + postfilter sbox 2 */ \
+	vgf2p8affineinvqb $(post_filter_constant_s2), t3, x1, x1; \
+	vgf2p8affineinvqb $(post_filter_constant_s2), t3, x4, x4; \
+	\
+	vpbroadcastb 7+key, t7; \
+	vpbroadcastb 6+key, t6; \
+	\
+	/* P-function */ \
+	vpxor x5, x0, x0; \
+	vpxor x6, x1, x1; \
+	vpxor x7, x2, x2; \
+	vpxor x4, x3, x3; \
+	\
+	vpbroadcastb 5+key, t5; \
+	vpbroadcastb 4+key, t4; \
+	\
+	vpxor x2, x4, x4; \
+	vpxor x3, x5, x5; \
+	vpxor x0, x6, x6; \
+	vpxor x1, x7, x7; \
+	\
+	vpbroadcastb 3+key, t3; \
+	vpbroadcastb 2+key, t2; \
+	\
+	vpxor x7, x0, x0; \
+	vpxor x4, x1, x1; \
+	vpxor x5, x2, x2; \
+	vpxor x6, x3, x3; \
+	\
+	vpbroadcastb 1+key, t1; \
+	vpbroadcastb 0+key, t0; \
+	\
+	vpxor x3, x4, x4; \
+	vpxor x0, x5, x5; \
+	vpxor x1, x6, x6; \
+	vpxor x2, x7, x7; /* note: high and low parts swapped */ \
+	\
+	/* Add key material and result to CD (x becomes new CD) */ \
+	\
+	vpxor t7, x0, x0; \
+	vpxor 4 * 32(mem_cd), x0, x0; \
+	\
+	vpxor t6, x1, x1; \
+	vpxor 5 * 32(mem_cd), x1, x1; \
+	\
+	vpxor t5, x2, x2; \
+	vpxor 6 * 32(mem_cd), x2, x2; \
+	\
+	vpxor t4, x3, x3; \
+	vpxor 7 * 32(mem_cd), x3, x3; \
+	\
+	vpxor t3, x4, x4; \
+	vpxor 0 * 32(mem_cd), x4, x4; \
+	\
+	vpxor t2, x5, x5; \
+	vpxor 1 * 32(mem_cd), x5, x5; \
+	\
+	vpxor t1, x6, x6; \
+	vpxor 2 * 32(mem_cd), x6, x6; \
+	\
+	vpxor t0, x7, x7; \
+	vpxor 3 * 32(mem_cd), x7, x7;
+
+#else /* USE_GFNI */
+
+/* roundsm32 (AES-NI / VAES version)
+ * IN:
+ *   x0..x7: byte-sliced AB state
+ *   mem_cd: register pointer storing CD state
+ *   key: index for key material
+ * OUT:
+ *   x0..x7: new byte-sliced CD state
+ */
+#define roundsm32(x0, x1, x2, x3, x4, x5, x6, x7, t0, t1, t2, t3, t4, t5, \
+		  t6, t7, mem_cd, key) \
 	/* \
 	 * S-function with AES subbytes \
 	 */ \
@@ -91,50 +255,58 @@
 	/* prefilter sbox 4 */ \
 	filter_8bit(x0, t5, t6, t7, t4); \
 	filter_8bit(x7, t5, t6, t7, t4); \
-	vextracti128 $1, x0, t0##_x; \
-	vextracti128 $1, x7, t1##_x; \
+	IF_AESNI(vextracti128 $1, x0, t0##_x); \
+	IF_AESNI(vextracti128 $1, x7, t1##_x); \
 	filter_8bit(x3, t2, t3, t7, t4); \
 	filter_8bit(x6, t2, t3, t7, t4); \
-	vextracti128 $1, x3, t3##_x; \
-	vextracti128 $1, x6, t2##_x; \
+	IF_AESNI(vextracti128 $1, x3, t3##_x); \
+	IF_AESNI(vextracti128 $1, x6, t2##_x); \
 	filter_8bit(x2, t5, t6, t7, t4); \
 	filter_8bit(x5, t5, t6, t7, t4); \
 	filter_8bit(x1, t5, t6, t7, t4); \
 	filter_8bit(x4, t5, t6, t7, t4); \
 	\
-	vpxor t4##_x, t4##_x, t4##_x; \
+	vpxor t4, t4, t4; \
 	\
 	/* AES subbytes + AES shift rows */ \
-	vextracti128 $1, x2, t6##_x; \
-	vextracti128 $1, x5, t5##_x; \
-	vaesenclast t4##_x, x0##_x, x0##_x; \
-	vaesenclast t4##_x, t0##_x, t0##_x; \
-	vaesenclast t4##_x, x7##_x, x7##_x; \
-	vaesenclast t4##_x, t1##_x, t1##_x; \
-	vaesenclast t4##_x, x3##_x, x3##_x; \
-	vaesenclast t4##_x, t3##_x, t3##_x; \
-	vaesenclast t4##_x, x6##_x, x6##_x; \
-	vaesenclast t4##_x, t2##_x, t2##_x; \
-	vinserti128 $1, t0##_x, x0, x0; \
-	vinserti128 $1, t1##_x, x7, x7; \
-	vinserti128 $1, t3##_x, x3, x3; \
-	vinserti128 $1, t2##_x, x6, x6; \
-	vextracti128 $1, x1, t3##_x; \
-	vextracti128 $1, x4, t2##_x; \
+	IF_AESNI(vextracti128 $1, x2, t6##_x; \
+		 vextracti128 $1, x5, t5##_x; \
+		 vaesenclast t4##_x, x0##_x, x0##_x; \
+		 vaesenclast t4##_x, t0##_x, t0##_x; \
+		 vaesenclast t4##_x, x7##_x, x7##_x; \
+		 vaesenclast t4##_x, t1##_x, t1##_x; \
+		 vaesenclast t4##_x, x3##_x, x3##_x; \
+		 vaesenclast t4##_x, t3##_x, t3##_x; \
+		 vaesenclast t4##_x, x6##_x, x6##_x; \
+		 vaesenclast t4##_x, t2##_x, t2##_x; \
+		 vinserti128 $1, t0##_x, x0, x0; \
+		 vinserti128 $1, t1##_x, x7, x7; \
+		 vinserti128 $1, t3##_x, x3, x3; \
+		 vinserti128 $1, t2##_x, x6, x6; \
+		 vextracti128 $1, x1, t3##_x; \
+		 vextracti128 $1, x4, t2##_x); \
 	vbroadcasti128 .Lpost_tf_lo_s1(%rip), t0; \
 	vbroadcasti128 .Lpost_tf_hi_s1(%rip), t1; \
-	vaesenclast t4##_x, x2##_x, x2##_x; \
-	vaesenclast t4##_x, t6##_x, t6##_x; \
-	vaesenclast t4##_x, x5##_x, x5##_x; \
-	vaesenclast t4##_x, t5##_x, t5##_x; \
-	vaesenclast t4##_x, x1##_x, x1##_x; \
-	vaesenclast t4##_x, t3##_x, t3##_x; \
-	vaesenclast t4##_x, x4##_x, x4##_x; \
-	vaesenclast t4##_x, t2##_x, t2##_x; \
-	vinserti128 $1, t6##_x, x2, x2; \
-	vinserti128 $1, t5##_x, x5, x5; \
-	vinserti128 $1, t3##_x, x1, x1; \
-	vinserti128 $1, t2##_x, x4, x4; \
+	IF_AESNI(vaesenclast t4##_x, x2##_x, x2##_x; \
+		 vaesenclast t4##_x, t6##_x, t6##_x; \
+		 vaesenclast t4##_x, x5##_x, x5##_x; \
+		 vaesenclast t4##_x, t5##_x, t5##_x; \
+		 vaesenclast t4##_x, x1##_x, x1##_x; \
+		 vaesenclast t4##_x, t3##_x, t3##_x; \
+		 vaesenclast t4##_x, x4##_x, x4##_x; \
+		 vaesenclast t4##_x, t2##_x, t2##_x; \
+		 vinserti128 $1, t6##_x, x2, x2; \
+		 vinserti128 $1, t5##_x, x5, x5; \
+		 vinserti128 $1, t3##_x, x1, x1; \
+		 vinserti128 $1, t2##_x, x4, x4); \
+	IF_VAES(vaesenclast t4, x0, x0; \
+		vaesenclast t4, x7, x7; \
+		vaesenclast t4, x3, x3; \
+		vaesenclast t4, x6, x6; \
+		vaesenclast t4, x2, x2; \
+		vaesenclast t4, x5, x5; \
+		vaesenclast t4, x1, x1; \
+		vaesenclast t4, x4, x4); \
 	\
 	/* postfilter sboxes 1 and 4 */ \
 	vbroadcasti128 .Lpost_tf_lo_s3(%rip), t2; \
@@ -150,17 +322,12 @@
 	filter_8bit(x2, t2, t3, t7, t6); \
 	filter_8bit(x5, t2, t3, t7, t6); \
 	\
-	vpbroadcastq key, t0; /* higher 64-bit duplicate ignored */ \
-	\
 	/* postfilter sbox 2 */ \
 	filter_8bit(x1, t4, t5, t7, t2); \
 	filter_8bit(x4, t4, t5, t7, t2); \
-	vpxor t7, t7, t7; \
 	\
-	vpsrldq $1, t0, t1; \
-	vpsrldq $2, t0, t2; \
-	vpshufb t7, t1, t1; \
-	vpsrldq $3, t0, t3; \
+	vpbroadcastb 7+key, t7; \
+	vpbroadcastb 6+key, t6; \
 	\
 	/* P-function */ \
 	vpxor x5, x0, x0; \
@@ -168,25 +335,24 @@
 	vpxor x7, x2, x2; \
 	vpxor x4, x3, x3; \
 	\
-	vpshufb t7, t2, t2; \
-	vpsrldq $4, t0, t4; \
-	vpshufb t7, t3, t3; \
-	vpsrldq $5, t0, t5; \
-	vpshufb t7, t4, t4; \
+	vpbroadcastb 5+key, t5; \
+	vpbroadcastb 4+key, t4; \
 	\
 	vpxor x2, x4, x4; \
 	vpxor x3, x5, x5; \
 	vpxor x0, x6, x6; \
 	vpxor x1, x7, x7; \
 	\
-	vpsrldq $6, t0, t6; \
-	vpshufb t7, t5, t5; \
-	vpshufb t7, t6, t6; \
+	vpbroadcastb 3+key, t3; \
+	vpbroadcastb 2+key, t2; \
 	\
 	vpxor x7, x0, x0; \
 	vpxor x4, x1, x1; \
 	vpxor x5, x2, x2; \
 	vpxor x6, x3, x3; \
+	\
+	vpbroadcastb 1+key, t1; \
+	vpbroadcastb 0+key, t0; \
 	\
 	vpxor x3, x4, x4; \
 	vpxor x0, x5, x5; \
@@ -195,15 +361,11 @@
 	\
 	/* Add key material and result to CD (x becomes new CD) */ \
 	\
-	vpxor t6, x1, x1; \
-	vpxor 5 * 32(mem_cd), x1, x1; \
-	\
-	vpsrldq $7, t0, t6; \
-	vpshufb t7, t0, t0; \
-	vpshufb t7, t6, t7; \
-	\
 	vpxor t7, x0, x0; \
 	vpxor 4 * 32(mem_cd), x0, x0; \
+	\
+	vpxor t6, x1, x1; \
+	vpxor 5 * 32(mem_cd), x1, x1; \
 	\
 	vpxor t5, x2, x2; \
 	vpxor 6 * 32(mem_cd), x2, x2; \
@@ -222,6 +384,8 @@
 	\
 	vpxor t0, x7, x7; \
 	vpxor 3 * 32(mem_cd), x7, x7;
+
+#endif /* USE_GFNI */
 
 /*
  * IN/OUT:
@@ -322,15 +486,11 @@
 	 * t0 &= ll; \
 	 * lr ^= rol32(t0, 1); \
 	 */ \
-	vpbroadcastd kll, t0; /* only lowest 32-bit used */ \
 	vpxor tt0, tt0, tt0; \
-	vpshufb tt0, t0, t3; \
-	vpsrldq $1, t0, t0; \
-	vpshufb tt0, t0, t2; \
-	vpsrldq $1, t0, t0; \
-	vpshufb tt0, t0, t1; \
-	vpsrldq $1, t0, t0; \
-	vpshufb tt0, t0, t0; \
+	vpbroadcastb 0+kll, t3; \
+	vpbroadcastb 1+kll, t2; \
+	vpbroadcastb 2+kll, t1; \
+	vpbroadcastb 3+kll, t0; \
 	\
 	vpand l0, t0, t0; \
 	vpand l1, t1, t1; \
@@ -340,7 +500,6 @@
 	rol32_1_32(t3, t2, t1, t0, tt1, tt2, tt3, tt0); \
 	\
 	vpxor l4, t0, l4; \
-	vpbroadcastd krr, t0; /* only lowest 32-bit used */ \
 	vmovdqu l4, 4 * 32(l); \
 	vpxor l5, t1, l5; \
 	vmovdqu l5, 5 * 32(l); \
@@ -355,13 +514,10 @@
 	 * rl ^= t2; \
 	 */ \
 	\
-	vpshufb tt0, t0, t3; \
-	vpsrldq $1, t0, t0; \
-	vpshufb tt0, t0, t2; \
-	vpsrldq $1, t0, t0; \
-	vpshufb tt0, t0, t1; \
-	vpsrldq $1, t0, t0; \
-	vpshufb tt0, t0, t0; \
+	vpbroadcastb 0+krr, t3; \
+	vpbroadcastb 1+krr, t2; \
+	vpbroadcastb 2+krr, t1; \
+	vpbroadcastb 3+krr, t0; \
 	\
 	vpor 4 * 32(r), t0, t0; \
 	vpor 5 * 32(r), t1, t1; \
@@ -373,7 +529,6 @@
 	vpxor 2 * 32(r), t2, t2; \
 	vpxor 3 * 32(r), t3, t3; \
 	vmovdqu t0, 0 * 32(r); \
-	vpbroadcastd krl, t0; /* only lowest 32-bit used */ \
 	vmovdqu t1, 1 * 32(r); \
 	vmovdqu t2, 2 * 32(r); \
 	vmovdqu t3, 3 * 32(r); \
@@ -383,13 +538,10 @@
 	 * t2 &= rl; \
 	 * rr ^= rol32(t2, 1); \
 	 */ \
-	vpshufb tt0, t0, t3; \
-	vpsrldq $1, t0, t0; \
-	vpshufb tt0, t0, t2; \
-	vpsrldq $1, t0, t0; \
-	vpshufb tt0, t0, t1; \
-	vpsrldq $1, t0, t0; \
-	vpshufb tt0, t0, t0; \
+	vpbroadcastb 0+krl, t3; \
+	vpbroadcastb 1+krl, t2; \
+	vpbroadcastb 2+krl, t1; \
+	vpbroadcastb 3+krl, t0; \
 	\
 	vpand 0 * 32(r), t0, t0; \
 	vpand 1 * 32(r), t1, t1; \
@@ -403,7 +555,6 @@
 	vpxor 6 * 32(r), t2, t2; \
 	vpxor 7 * 32(r), t3, t3; \
 	vmovdqu t0, 4 * 32(r); \
-	vpbroadcastd klr, t0; /* only lowest 32-bit used */ \
 	vmovdqu t1, 5 * 32(r); \
 	vmovdqu t2, 6 * 32(r); \
 	vmovdqu t3, 7 * 32(r); \
@@ -414,13 +565,10 @@
 	 * ll ^= t0; \
 	 */ \
 	\
-	vpshufb tt0, t0, t3; \
-	vpsrldq $1, t0, t0; \
-	vpshufb tt0, t0, t2; \
-	vpsrldq $1, t0, t0; \
-	vpshufb tt0, t0, t1; \
-	vpsrldq $1, t0, t0; \
-	vpshufb tt0, t0, t0; \
+	vpbroadcastb 0+klr, t3; \
+	vpbroadcastb 1+klr, t2; \
+	vpbroadcastb 2+klr, t1; \
+	vpbroadcastb 3+klr, t0; \
 	\
 	vpor l4, t0, t0; \
 	vpor l5, t1, t1; \
@@ -609,6 +757,75 @@
 .Lbswap128_mask:
 	.byte 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0
 
+#ifdef USE_GFNI
+
+.align 64
+/* Pre-filters and post-filters bit-matrixes for Camellia sboxes s1, s2, s3
+ * and s4.
+ *   See http://urn.fi/URN:NBN:fi:oulu-201305311409, pages 43-48.
+ *
+ * Pre-filters are directly from above source, "θ₁"/"θ₄". Post-filters are
+ * combination of function "A" (AES SubBytes affine transformation) and
+ * "ψ₁"/"ψ₂"/"ψ₃".
+ */
+
+/* Bit-matrix from "θ₁(x)" function: */
+.Lpre_filter_bitmatrix_s123:
+	.quad BM8X8(BV8(1, 1, 1, 0, 1, 1, 0, 1),
+		    BV8(0, 0, 1, 1, 0, 0, 1, 0),
+		    BV8(1, 1, 0, 1, 0, 0, 0, 0),
+		    BV8(1, 0, 1, 1, 0, 0, 1, 1),
+		    BV8(0, 0, 0, 0, 1, 1, 0, 0),
+		    BV8(1, 0, 1, 0, 0, 1, 0, 0),
+		    BV8(0, 0, 1, 0, 1, 1, 0, 0),
+		    BV8(1, 0, 0, 0, 0, 1, 1, 0))
+
+/* Bit-matrix from "θ₄(x)" function: */
+.Lpre_filter_bitmatrix_s4:
+	.quad BM8X8(BV8(1, 1, 0, 1, 1, 0, 1, 1),
+		    BV8(0, 1, 1, 0, 0, 1, 0, 0),
+		    BV8(1, 0, 1, 0, 0, 0, 0, 1),
+		    BV8(0, 1, 1, 0, 0, 1, 1, 1),
+		    BV8(0, 0, 0, 1, 1, 0, 0, 0),
+		    BV8(0, 1, 0, 0, 1, 0, 0, 1),
+		    BV8(0, 1, 0, 1, 1, 0, 0, 0),
+		    BV8(0, 0, 0, 0, 1, 1, 0, 1))
+
+/* Bit-matrix from "ψ₁(A(x))" function: */
+.Lpost_filter_bitmatrix_s14:
+	.quad BM8X8(BV8(0, 0, 0, 0, 0, 0, 0, 1),
+		    BV8(0, 1, 1, 0, 0, 1, 1, 0),
+		    BV8(1, 0, 1, 1, 1, 1, 1, 0),
+		    BV8(0, 0, 0, 1, 1, 0, 1, 1),
+		    BV8(1, 0, 0, 0, 1, 1, 1, 0),
+		    BV8(0, 1, 0, 1, 1, 1, 1, 0),
+		    BV8(0, 1, 1, 1, 1, 1, 1, 1),
+		    BV8(0, 0, 0, 1, 1, 1, 0, 0))
+
+/* Bit-matrix from "ψ₂(A(x))" function: */
+.Lpost_filter_bitmatrix_s2:
+	.quad BM8X8(BV8(0, 0, 0, 1, 1, 1, 0, 0),
+		    BV8(0, 0, 0, 0, 0, 0, 0, 1),
+		    BV8(0, 1, 1, 0, 0, 1, 1, 0),
+		    BV8(1, 0, 1, 1, 1, 1, 1, 0),
+		    BV8(0, 0, 0, 1, 1, 0, 1, 1),
+		    BV8(1, 0, 0, 0, 1, 1, 1, 0),
+		    BV8(0, 1, 0, 1, 1, 1, 1, 0),
+		    BV8(0, 1, 1, 1, 1, 1, 1, 1))
+
+/* Bit-matrix from "ψ₃(A(x))" function: */
+.Lpost_filter_bitmatrix_s3:
+	.quad BM8X8(BV8(0, 1, 1, 0, 0, 1, 1, 0),
+		    BV8(1, 0, 1, 1, 1, 1, 1, 0),
+		    BV8(0, 0, 0, 1, 1, 0, 1, 1),
+		    BV8(1, 0, 0, 0, 1, 1, 1, 0),
+		    BV8(0, 1, 0, 1, 1, 1, 1, 0),
+		    BV8(0, 1, 1, 1, 1, 1, 1, 1),
+		    BV8(0, 0, 0, 1, 1, 1, 0, 0),
+		    BV8(0, 0, 0, 0, 0, 0, 0, 1))
+
+#else /* USE_GFNI */
+
 /*
  * pre-SubByte transform
  *
@@ -729,6 +946,8 @@
 /* 4-bit mask */
 .L0f0f0f0f:
 	.long 0x0f0f0f0f
+
+#endif /* USE_GFNI */
 
 .align 8
 __camellia_enc_blk32:

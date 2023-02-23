@@ -56,11 +56,13 @@ The SIMD256 (256-bit vector) implementation variants process 32 blocks in parall
     reference.
 
 - [camellia_simd256_x86-64_aesni_avx2.S](camellia_simd256_x86-64_aesni_avx2.S):
-  - GCC assembly implementation for x86-64 with AES-NI and AVX2.
-  - On AMD Ryzen 3700X, when compiled for **x86-64+AVX2+AES-NI**, this implementation is **~6.6 times faster** than
-    reference.
-  - On Intel Haswell, CTR-mode adaptation runs at **3.72 cycles/byte**
-    [*](https://github.com/jkivilin/supercop-blockciphers).
+  - GCC assembly implementation for x86-64 with AES-NI/VAES/GFNI AVX2.
+  - On Intel Core i5-6500 (skylake), when compiled for **x86-64+AVX2+AES-NI**, this implementation is **~5.8 times faster**
+    than reference.
+  - On AMD Ryzen 9 7900X (zen4), when compiled for **x86-64+AVX2+VAES**, this implementation is **~9.2 times faster**
+    than reference.
+  - On AMD Ryzen 9 7900X (zen4), when compiled for **x86-64+AVX2+GFNI**, this implementation is **~18.2 times faster**
+    than reference (**~0.92 cycles/byte**).
 
 # Compiling and testing
 
