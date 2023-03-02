@@ -55,6 +55,8 @@ typedef uint64x2_t __m128i;
 				  o = (__m128i)vec_sld((uint8x16_t)a, \
 						       (uint8x16_t)__tmp, (s) & 15);})
 
+#define if_vpsrlb128(...)       __VA_ARGS__
+#define if_not_vpsrlb128(...)   /*_*/
 #define vpsrl_byte_128(s, a, o) vpsrlb128(s, a, o)
 #define vpsll_byte_128(s, a, o) vpsllb128(s, a, o)
 
@@ -146,6 +148,8 @@ static const uint8x16_t shift_row =
 				o = (__m128i)vextq_u8((uint8x16_t)__tmp, \
 						      (uint8x16_t)a, (16 - (s)) & 15);})
 
+#define if_vpsrlb128(...)       __VA_ARGS__
+#define if_not_vpsrlb128(...)   /*_*/
 #define vpsrl_byte_128(s, a, o) vpsrlb128(s, a, o)
 #define vpsll_byte_128(s, a, o) vpsllb128(s, a, o)
 
@@ -217,6 +221,8 @@ static const uint8x16_t shift_row =
 #define vpsrldq128(s, a, o)     (o = _mm_srli_si128(a, s))
 #define vpslldq128(s, a, o)     (o = _mm_slli_si128(a, s))
 
+#define if_vpsrlb128(...)       /*_*/
+#define if_not_vpsrlb128(...)   __VA_ARGS__
 #define vpsrl_byte_128(s, a, o) vpsrld128(s, a, o)
 #define vpsll_byte_128(s, a, o) vpslld128(s, a, o)
 
@@ -273,8 +279,9 @@ static const uint8x16_t shift_row =
  **********************************************************************/
 #define filter_8bit(x, lo_t, hi_t, mask4bit, tmp0) \
 	vpand128(x, mask4bit, tmp0); \
-	vpandn128(x, mask4bit, x); \
-	vpsrl_byte_128(4, x, x); \
+	if_vpsrlb128(vpsrlb128(4, x, x)); \
+	if_not_vpsrlb128(vpandn128(x, mask4bit, x)); \
+	if_not_vpsrlb128(vpsrld128(4, x, x)); \
 	\
 	vpshufb128(tmp0, lo_t, tmp0); \
 	vpshufb128(x, hi_t, x); \
