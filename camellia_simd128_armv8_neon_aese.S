@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 2025, Iakov Polyak <iakov.polyak@linaro.org>
+ * Copyright (C) 2020,2023 Jussi Kivilinna <jussi.kivilinna@iki.fi>
+ *
+ * Based on the x86_64/AVX implementation by Jussi Kivilinna.
+ *
+ * SPDX-License-Identifier: MIT
+ */
 .text
 
 /**********************************************************************
