@@ -1,10 +1,8 @@
 # About
-This is repository, you find x86 (AES-NI, VAES, GFNI), ARMv8 Crypto Extension
-and PowerPC crypto instruction set accelerated vector implementations of
+In this repository, you find x86 (AES-NI, VAES, GFNI), ARMv8 (Neon/AES Crypto Extension) and PowerPC crypto instruction set accelerated vector implementations of
 [Camellia cipher](https://info.isl.ntt.co.jp/crypt/eng/camellia/).
-For x86, both Intel C intrinsics and x86-64 assembly implementations are provided,
-with assembly yielding best performance and instrinsics implementation being
-easier to port to other instruction sets. For ARMv8/AArch64 and PowerPC,
+For x86-64 and aarch64, both Intel C intrinsics and assembly implementations are provided, with the instrinsics implementation being
+easier to port to other instruction sets. For PowerPC,
 a 128-bit vector instrinsics implementation is provided.
 
 # How it works
@@ -28,12 +26,13 @@ CFB decryption, XTS, OCB, etc.
 The SIMD128 (128-bit vector) implementation variants process 16 blocks in parallel.
 
 - [camellia_simd128_with_aes_instruction_set.c](camellia_simd128_with_aes_instruction_set.c):
-  - C intrinsics implementation for x86 with AES-NI, for ARMv8 with Crypto Extension and for PowerPC with AES crypto instruction set.
+  - C intrinsics implementation for x86 with AES-NI, for ARMv8 with Crypto Extension (CE) and for PowerPC with AES crypto instruction set.
     - x86 implementation requires AES-NI and either SSE4.1 or AVX instruction set and gets best performance with x86-64 + AVX.
-    - ARM implementation requires AArch64, NEON and ARMv8 crypto-extension instruction set.
+    - ARM implementation requires AArch64, NEON and ARMv8 AES CE instruction set.
     - PowerPC implementation requires VSX and AES crypto instruction set.
   - Includes vector intrinsics implementation of Camellia key-setup (for 128-bit, 192-bit and 256-bit keys).
   - On Intel Core i5-6500 (skylake), this implementation is **~3.5 times faster** than reference.
+  - On ThunderX2, this implementation is **~3.0 times faster** than reference (compiled with gcc-13).
   - On POWER9/ppc64le, this implementation is **~2.4 times faster** than reference.
 
 - [camellia_simd128_x86-64_aesni_avx.S](camellia_simd128_x86-64_aesni_avx.S):
@@ -41,6 +40,11 @@ The SIMD128 (128-bit vector) implementation variants process 16 blocks in parall
   - Includes vector assembly implementation of Camellia key-setup (for 128-bit, 192-bit and 256-bit keys).
   - On Intel Core i5-6500 (skylake), this implementation is **~3.6 times faster** than reference.
   - On AMD Ryzen 9 7900X (zen4), this implementation is **~4.5 times faster** than reference.
+
+- [camellia_simd128_armv8_neon_aese.S](camellia_simd128_armv8_neon_aese.S):
+  - GCC assembly implementation for armv8 with Neon and AES CE.
+  - Includes vector assembly implementation of Camellia key-setup (for 128-bit, 192-bit and 256-bit keys).
+  - On ThunderX2, this implementation is **~2.7 times faster** than reference.
 
 ## SIMD256
 The SIMD256 (256-bit vector) implementation variants process 32 blocks in parallel.
@@ -112,7 +116,9 @@ i686-linux-gnu-gcc camellia_simd128_with_x86_aesni_avx2_i386.o camellia_simd256_
 aarch64-linux-gnu-gcc -O2 -Wall -march=armv8-a+crypto -mtune=cortex-a53 -c camellia_simd128_with_aes_instruction_set.c -o camellia_simd128_with_aarch64_ce.o
 aarch64-linux-gnu-gcc -O2 -Wall -march=armv8-a+crypto -mtune=cortex-a53 -c main.c -o main_simd128_aarch64.o
 aarch64-linux-gnu-gcc -O2 -Wall -march=armv8-a+crypto -mtune=cortex-a53 -c camellia-BSD-1.2.0/camellia.c -o camellia_ref_aarch64.o
-aarch64-linux-gnu-gcc camellia_simd128_with_aarch64_ce.o main_simd128_aarch64.o camellia_ref_aarch64.o -o test_simd128_intrinsics_aarch64
+aarch64-linux-gnu-gcc -static camellia_simd128_with_aarch64_ce.o main_simd128_aarch64.o camellia_ref_aarch64.o -o test_simd128_intrinsics_aarch64
+aarch64-linux-gnu-gcc -O2 -Wall -march=armv8-a+crypto -mtune=cortex-a53 -c camellia_simd128_armv8_neon_aese.S -o camellia_simd128_armv8_neon_aese.o
+aarch64-linux-gnu-gcc -static camellia_simd128_armv8_neon_aese.o main_simd128_aarch64.o camellia_ref_aarch64.o -o test_simd128_asm_armv8
 powerpc64le-linux-gnu-gcc -O2 -Wall -mcpu=power8 -maltivec -mvsx -mcrypto -c camellia_simd128_with_aes_instruction_set.c -o camellia_simd128_with_ppc64le.o
 powerpc64le-linux-gnu-gcc -O2 -Wall -mcpu=power8 -maltivec -mvsx -mcrypto -c main.c -o main_simd128_ppc64le.o
 powerpc64le-linux-gnu-gcc -O2 -Wall -mcpu=power8 -maltivec -mvsx -mcrypto -c camellia-BSD-1.2.0/camellia.c -o camellia_ref_ppc64le.o
@@ -120,12 +126,13 @@ powerpc64le-linux-gnu-gcc camellia_simd128_with_ppc64le.o main_simd128_ppc64le.o
 </pre>
 
 ## Testing
-Thirteen executables are build. Run executables to verify implementation against test-vectors (with
+Fourteen executables are build. Run executables to verify implementation against test-vectors (with
 128-bit, 192-bit and 256-bit key lengths) and benchmark against reference implementation from
 OpenSSL (with 128-bit key length).
 
 Executables are:
 - `test_simd128_asm_x86_64`: SIMD128 only, for testing assembly x86-64/AES-NI/AVX implementation without AVX2.
+- `test_simd128_asm_armv8`: SIMD128 only, for testing armv8 assembly (Neon/AES) implementation.
 - `test_simd128_intrinsics_i386`: SIMD128 only, for testing intrinsics implementation on i386/AES-NI/AVX without AVX2.
 - `test_simd128_intrinsics_x86_64`: SIMD128 only, for testing intrinsics implementation on x86_64/AES-NI/AVX without AVX2.
 - `test_simd128_intrinsics_aarch64`: SIMD128 only, for testing intrinsics implementation on ARMv8 AArch64 with Crypto Extensions.
@@ -201,4 +208,39 @@ selftest: checking 16-block parallel camellia-256/SIMD128 against large test vec
            camellia-128 reference decryption:     29.372 Mebibytes/s,     30.799 Megabytes/s
  camellia-128 SIMD128 (16 blocks) encryption:     36.700 Mebibytes/s,     38.483 Megabytes/s
  camellia-128 SIMD128 (16 blocks) decryption:     36.164 Mebibytes/s,     37.921 Megabytes/s
+</pre>
+
+On ThunderX2 (2.2GHz) output of `test_simd128_intrinsics_aarch64` is as follows (compiled with `-mtune=native`):
+<pre>
+$ taskset -c 0 ./test_simd128_intrinsics_aarch64
+./test_simd128_intrinsics_aarch64:
+selftest: comparing camellia-128 test vectors against reference implementation...
+selftest: comparing camellia-192 test vectors against reference implementation...
+selftest: comparing camellia-256 test vectors against reference implementation...
+selftest: checking 16-block parallel camellia-128/SIMD128 against test vectors...
+selftest: checking 16-block parallel camellia-192/SIMD128 against test vectors...
+selftest: checking 16-block parallel camellia-256/SIMD128 against test vectors...
+selftest: checking 16-block parallel camellia-128/SIMD128 against large test vectors...
+selftest: checking 16-block parallel camellia-256/SIMD128 against large test vectors...
+           camellia-128 reference encryption:     98.590 Mebibytes/s,    103.379 Megabytes/s
+           camellia-128 reference decryption:     98.588 Mebibytes/s,    103.377 Megabytes/s
+ camellia-128 SIMD128 (16 blocks) encryption:    296.305 Mebibytes/s,    310.699 Megabytes/s
+ camellia-128 SIMD128 (16 blocks) decryption:    287.411 Mebibytes/s,    301.372 Megabytes/s
+</pre>
+and output of `test_simd128_asm_armv8` is as follows:
+<pre>
+$ taskset -c 0 ./test_simd128_asm_armv8
+./test_simd128_asm_armv8:
+selftest: comparing camellia-128 test vectors against reference implementation...
+selftest: comparing camellia-192 test vectors against reference implementation...
+selftest: comparing camellia-256 test vectors against reference implementation...
+selftest: checking 16-block parallel camellia-128/SIMD128 against test vectors...
+selftest: checking 16-block parallel camellia-192/SIMD128 against test vectors...
+selftest: checking 16-block parallel camellia-256/SIMD128 against test vectors...
+selftest: checking 16-block parallel camellia-128/SIMD128 against large test vectors...
+selftest: checking 16-block parallel camellia-256/SIMD128 against large test vectors...
+           camellia-128 reference encryption:     98.563 Mebibytes/s,    103.350 Megabytes/s
+           camellia-128 reference decryption:     98.579 Mebibytes/s,    103.367 Megabytes/s
+ camellia-128 SIMD128 (16 blocks) encryption:    268.200 Mebibytes/s,    281.228 Megabytes/s
+ camellia-128 SIMD128 (16 blocks) decryption:    265.601 Mebibytes/s,    278.503 Megabytes/s
 </pre>

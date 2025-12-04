@@ -28,7 +28,9 @@ ifneq ($(shell which $(CC_I386)),)
 	PROGRAMS += test_simd128_intrinsics_i386 test_simd256_intrinsics_i386
 endif
 ifneq ($(shell which $(CC_AARCH64)),)
-	PROGRAMS += test_simd128_intrinsics_aarch64
+	PROGRAMS += \
+		test_simd128_intrinsics_aarch64 \
+		test_simd128_asm_armv8
 endif
 ifneq ($(shell which $(CC_PPC64LE)),)
 	PROGRAMS += test_simd128_intrinsics_ppc64le
@@ -50,6 +52,7 @@ clean:
 	rm test_simd128_intrinsics_i386 2>/dev/null || true
 	rm test_simd256_intrinsics_i386 2>/dev/null || true
 	rm test_simd128_intrinsics_aarch64 2>/dev/null || true
+	rm test_simd128_asm_armv8 2>/dev/null || true
 	rm test_simd128_intrinsics_ppc64le 2>/dev/null || true
 
 test_simd128_intrinsics_x86_64: camellia_simd128_with_x86_aesni.o \
@@ -104,6 +107,11 @@ test_simd256_asm_x86_64_gfni: camellia_simd128_x86-64_aesni_avx.o \
 			      camellia_ref_x86-64.o
 	$(CC_X86_64) $^ -o $@ $(LDFLAGS)
 
+test_simd128_asm_armv8: camellia_simd128_armv8_neon_aese.o \
+			 main_simd128_aarch64.o \
+			 camellia_ref_aarch64.o
+	$(CC_AARCH64) -static $^ -o $@ $(LDFLAGS)
+
 test_simd128_intrinsics_i386: camellia_simd128_with_x86_aesni_i386.o \
 			      main_simd128_i386.o \
 			      camellia_ref_i386.o
@@ -118,7 +126,7 @@ test_simd256_intrinsics_i386: camellia_simd128_with_x86_aesni_avx2_i386.o \
 test_simd128_intrinsics_aarch64: camellia_simd128_with_aarch64_ce.o \
 				 main_simd128_aarch64.o \
 				 camellia_ref_aarch64.o
-	$(CC_AARCH64) $^ -o $@ $(LDFLAGS)
+	$(CC_AARCH64) -static $^ -o $@ $(LDFLAGS)
 
 test_simd128_intrinsics_ppc64le: camellia_simd128_with_ppc64le.o \
 				 main_simd128_ppc64le.o \
@@ -185,6 +193,9 @@ main_simd128_i386.o: main.c
 
 main_simd256_i386.o: main.c
 	$(CC_I386) $(CFLAGS) -DUSE_SIMD256 -c $< -o $@
+
+camellia_simd128_armv8_neon_aese.o: camellia_simd128_armv8_neon_aese.S
+	$(CC_AARCH64) $(CFLAGS_SIMD128_ARM) -c $< -o $@
 
 camellia_simd128_with_aarch64_ce.o: camellia_simd128_with_aes_instruction_set.c
 	$(CC_AARCH64) $(CFLAGS_SIMD128_ARM) -c $< -o $@
